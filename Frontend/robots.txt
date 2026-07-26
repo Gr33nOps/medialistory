@@ -1,0 +1,17 @@
+# App entry and legal pages may be indexed.
+# Auth-walled surfaces are disallowed.
+
+User-agent: *
+Allow: /
+Allow: /home.html
+Allow: /auth.html
+Allow: /terms.html
+Allow: /privacy.html
+
+Disallow: /myGameList.html
+Disallow: /profile.html
+Disallow: /friends.html
+Disallow: /userProfile.html
+Disallow: /admin.html
+Disallow: /moderator.html
+Disallow: /api/

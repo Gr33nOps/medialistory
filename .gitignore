@@ -1,0 +1,35 @@
+# dependencies
+node_modules/
+
+# environment
+.env
+.env.local
+!.env.example
+
+# logs / CI artifacts
+logs/
+*.log
+ci-logs/
+ci-logs.zip
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vs/
+.vscode/
+.idea/
+
+# local docs exports (keep markdown + OpenAPI tracked)
+docs/**/*.pdf
+docs/**/*.docx
+docs/**/*.pptx
+docs/**/*.mp4
+video.mp4
+*.session.sql
+
+# Cursor / local helpers
+.cursor/
+.agents/
+.claude/
+scripts/
+.vercel/

@@ -1,0 +1,84 @@
+openapi: 3.0.3
+info:
+  title: MyGameList API
+  version: 1.0.0
+  description: |
+    IGDB-backed game list API. Product is IGDB-only (not RAWG).
+    Client game ids use the form `igdb_<number>`.
+servers:
+  - url: /api
+  - url: /api/v1
+tags:
+  - name: auth
+  - name: igdb
+  - name: user
+paths:
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Login with email/username + password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [emailOrUsername, password]
+              properties:
+                emailOrUsername: { type: string }
+                password: { type: string }
+                rememberMe: { type: boolean }
+      responses:
+        '200':
+          description: JWT + user
+        '401':
+          description: Invalid credentials
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Register (email verification required)
+      responses:
+        '200':
+          description: Registration accepted
+  /igdb/games:
+    post:
+      tags: [igdb]
+      summary: Browse or detail games (server-built IGDB query)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { type: integer, description: IGDB numeric id for detail }
+                search: { type: string }
+                genre: { type: string }
+                platform: { type: string }
+                sort:
+                  type: string
+                  enum: [release, rating, name, popularity, coming]
+                limit: { type: integer, minimum: 1, maximum: 50, default: 20 }
+                offset: { type: integer, minimum: 0 }
+              description: Raw Apicalypse `query` strings are rejected.
+      responses:
+        '200':
+          description: IGDB-shaped game array
+        '401':
+          description: Missing/invalid JWT
+        '429':
+          description: Rate limited
+  /user/export:
+    get:
+      tags: [user]
+      summary: Export the authenticated user's lists and games as JSON
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Portable JSON export
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

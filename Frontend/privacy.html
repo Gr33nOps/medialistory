@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Privacy Policy - My Game List</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .legal-wrap { max-width: 820px; margin: 0 auto; padding: 40px 20px 80px; }
+        .legal-wrap h1 { margin-bottom: 8px; }
+        .legal-wrap .updated { color: var(--text-muted); font-size: 14px; margin-bottom: 32px; }
+        .legal-wrap h2 { margin: 28px 0 10px; font-size: 20px; }
+        .legal-wrap p, .legal-wrap li { color: var(--text-secondary); line-height: 1.7; }
+        .legal-wrap ul { margin: 8px 0 8px 20px; }
+        .legal-wrap a { color: var(--blue); }
+        .legal-back { margin-bottom: 24px; display: inline-block; }
+    </style>
+</head>
+<body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <div id="main-content" tabindex="-1" class="container">
+        <div class="legal-wrap">
+            <a href="home.html" class="btn btn-secondary legal-back" id="legalBack">Back</a>
+            <h1>Privacy Policy</h1>
+            <p class="updated">Last updated: July 2026</p>
+
+            <p>This Privacy Policy explains what information My Game List collects, how it is used, and the choices you have.</p>
+
+            <h2>1. Information we collect</h2>
+            <ul>
+                <li><strong>Account data:</strong> email address, username, and password (stored securely by our authentication provider).</li>
+                <li><strong>Profile data:</strong> optional details such as display name and avatar.</li>
+                <li><strong>Activity data:</strong> your game lists, statuses, scores, custom lists, and follows.</li>
+                <li><strong>Technical data:</strong> basic logs needed to operate and secure the service.</li>
+            </ul>
+
+            <h2>2. How we use information</h2>
+            <p>We use your information to provide and maintain your account, display your collections and social features, secure the platform, and improve the product. We do not sell your personal information.</p>
+
+            <h2>3. Third-party services</h2>
+            <p>We rely on Supabase for authentication and database hosting, and on the IGDB API (a Twitch service) for game data. These providers process data on our behalf under their own terms and privacy policies.</p>
+
+            <h2>4. Data storage and security</h2>
+            <p>Passwords are handled by our authentication provider and are never stored in plain text. We take reasonable measures to protect your data, but no method of transmission or storage is completely secure.</p>
+
+            <h2>5. Your choices</h2>
+            <p>You can update your profile information at any time from the profile page. You may request deletion of your account through the project's support channels; deleting your account removes your lists and profile data.</p>
+
+            <h2>6. Cookies and local storage</h2>
+            <p>The app uses browser local storage to keep you signed in. It does not use third-party advertising trackers.</p>
+
+            <h2>7. Changes to this policy</h2>
+            <p>We may update this policy from time to time. Material changes will be reflected by the "Last updated" date above.</p>
+
+            <p style="margin-top:32px;">See also our <a href="terms.html">Terms of Service</a>.</p>
+        </div>
+    </div>
+    <script src="common.js"></script>
+    <script>
+        (function () {
+            var back = document.getElementById('legalBack');
+            if (!back) return;
+            if (typeof getToken === 'function' && getToken()) back.href = 'home.html';
+            else back.href = 'auth.html';
+        })();
+    </script>
+</body>
+</html>

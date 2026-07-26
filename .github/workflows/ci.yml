@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Case-sensitive path checks
+        run: |
+          test -f Backend/server.js
+          test -f Backend/auth.js
+          test -f Backend/admin.js
+          test -f Backend/moderator.js
+          test -f Backend/myGameList.js
+          test -f Backend/igdb.js
+          test -f Backend/localUser.js
+          test -f Backend/userRoles.js
+          test -f Backend/rateLimitStore.js
+          test -f Dockerfile
+          test -f Procfile
+          test -f Frontend/common.js
+          test -f Frontend/index.html
+          test -f Frontend/home.html
+          test -f Frontend/auth.html
+          test -f Frontend/404.html
+          test -f Frontend/robots.txt
+          test -f DB/schema.postgres.sql
+          test -f DB/README.md
+          test -d DB/migrations
+          test -d DB/legacy
+          test -f docs/API.md
+          test -f docs/openapi.yaml
+          test -f docs/runbook.md
+          test ! -d docs/screenshots
+          test -f Frontend/admin.html
+          test -f Frontend/moderator.html
+          test ! -e Frontend/landing.js
+          test ! -e Frontend/landing.css
+          test ! -e Backend/publicShowcase.js
+          test ! -e Backend/rawg.js
+          test ! -e Backend/Auth.js
+          test ! -e Frontend/Moderator.html
+          test ! -d Backend/old
+          test ! -d Backend/new
+          test ! -d Frontend/new
+          test ! -d Frontend/old
+          test ! -d supabase-migration
+          test ! -d .vscode
+
+      - name: Require resolution (Linux case-sensitive)
+        run: |
+          node -e "['./auth','./admin','./moderator','./myGameList','./igdb','./localUser','./userRoles','./errors','./supabaseAdmin'].forEach(m=>require(m)); console.log('requires ok')"
+        working-directory: Backend
+
+      - name: Unit + smoke tests
+        run: npm test
+
+      - name: Assert relative API_BASE
+        run: |
+          ! grep -R "http://localhost:3000/api" Frontend --include='*.js'
+          grep -q "API_BASE" Frontend/home.js
+          grep -q "'/api'" Frontend/home.js
+
+      - name: Boot server (expect missing env exit)
+        run: |
+          set +e
+          node Backend/server.js > /tmp/boot.log 2>&1
+          code=$?
+          set -e
+          grep -q "Missing environment variables" /tmp/boot.log
+          test "$code" -ne 0

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Sign in - My Game List</title>
+    <meta name="description" content="Sign in or create a My Game List account to track and discover games.">
+    <meta name="robots" content="index,follow">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <div id="main-content" tabindex="-1" class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h1>My Game List</h1>
+                <p id="authSubtitle">Track and discover your favorite games</p>
+            </div>
+
+            <div class="auth-tabs" id="authTabs" role="tablist" aria-label="Authentication">
+                <button type="button" class="tab-btn active" role="tab" id="tab-login" data-tab="login" aria-controls="loginForm" aria-selected="true">Login</button>
+                <button type="button" class="tab-btn" role="tab" id="tab-register" data-tab="register" aria-controls="registerForm" aria-selected="false" tabindex="-1">Register</button>
+            </div>
+
+            <div id="oauthSection" class="oauth-section">
+                <button type="button" class="btn oauth-btn oauth-google" id="oauthGoogleBtn">
+                    <svg class="oauth-icon" viewBox="0 0 24 24" aria-hidden="true" width="18" height="18"><path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.6 3.9-5.5 3.9-3.3 0-6-2.7-6-6s2.7-6 6-6c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.9 3.4 14.7 2.4 12 2.4 6.9 2.4 2.7 6.6 2.7 11.7S6.9 21 12 21c5.2 0 8.6-3.6 8.6-8.7 0-.6-.1-1-.2-1.5H12z"/><path fill="#34A853" d="M3.9 7.4l3.2 2.3C8 7.7 9.8 6.5 12 6.5c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.9 3.4 14.7 2.4 12 2.4 8.2 2.4 4.9 4.5 3.9 7.4z"/><path fill="#FBBC05" d="M12 21c2.6 0 4.8-.9 6.4-2.4l-3.1-2.4c-.9.6-2 1.1-3.3 1.1-2.5 0-4.7-1.7-5.5-4l-3.2 2.5C5 18.6 8.2 21 12 21z"/><path fill="#4285F4" d="M20.6 12.3c0-.6-.1-1-.2-1.5H12v3.9h5.5c-.3 1.3-1.1 2.3-2.2 3l3.1 2.4c1.8-1.7 2.9-4.1 2.9-7.8z"/></svg>
+                    Continue with Google
+                </button>
+                <button type="button" class="btn oauth-btn oauth-discord" id="oauthDiscordBtn">
+                    <svg class="oauth-icon" viewBox="0 0 24 24" aria-hidden="true" width="18" height="18"><path fill="currentColor" d="M20.3 4.4A19 19 0 0 0 15.6 3l-.2.5a17.5 17.5 0 0 1 4.3 2.1 16.4 16.4 0 0 0-14.4 0A17 17 0 0 1 9.5 3.5L9.3 3a19 19 0 0 0-4.7 1.4C2.2 8.1 1.4 11.7 1.7 15.2a19.3 19.3 0 0 0 5.9 3l.7-1.2a12.5 12.5 0 0 1-1.9-.9l.5-.4a9 9 0 0 0 11.2 0l.5.4c-.6.4-1.2.7-1.9.9l.7 1.2a19.2 19.2 0 0 0 5.9-3c.4-4-.3-7.5-2.3-10.8ZM8.7 13.7c-.8 0-1.5-.8-1.5-1.7s.7-1.7 1.5-1.7 1.5.8 1.5 1.7-.6 1.7-1.5 1.7Zm6.6 0c-.8 0-1.5-.8-1.5-1.7s.7-1.7 1.5-1.7 1.5.8 1.5 1.7-.7 1.7-1.5 1.7Z"/></svg>
+                    Continue with Discord
+                </button>
+                <div id="oauthError" class="error hidden" role="status" aria-live="polite"></div>
+                <div class="oauth-divider" aria-hidden="true"><span>or</span></div>
+            </div>
+
+            <div id="oauthStatus" class="hidden" style="text-align:center;padding:40px 30px;">
+                <div class="loading-indicator"><div class="spinner"></div><p>Finishing sign-in…</p></div>
+            </div>
+
+            <form id="oauthUsernameForm" class="auth-form hidden" aria-label="Choose username">
+                <h2 style="font-size:22px;margin-bottom:8px;">Choose a username</h2>
+                <p style="margin-bottom:20px;color:var(--text-secondary);font-size:14px;">Pick how you appear on My Game List. You can change this later from your profile.</p>
+                <div class="form-group">
+                    <label for="oauthUsernameInput">Username</label>
+                    <input type="text" id="oauthUsernameInput" class="form-input" placeholder="Choose a username" required pattern="^[a-zA-Z0-9_]{3,50}$" minlength="3" maxlength="50" autocomplete="username">
+                    <small>3-50 characters: letters, numbers, underscores</small>
+                </div>
+                <button type="submit" class="btn btn-primary" id="oauthUsernameBtn" style="width:100%;">
+                    <span class="btn-text">Continue</span>
+                    <span class="btn-loader hidden"><span class="spinner"></span></span>
+                </button>
+                <button type="button" class="btn btn-secondary" id="oauthUsernameSkip" style="width:100%;margin-top:10px;">Keep suggested name</button>
+                <div id="oauthUsernameError" class="error hidden" role="status" aria-live="polite"></div>
+            </form>
+
+            <form id="loginForm" class="auth-form active" role="tabpanel" aria-labelledby="tab-login">
+                <div class="form-group">
+                    <label for="loginEmail">Email or Username</label>
+                    <input type="text" id="loginEmail" class="form-input" placeholder="Enter your email or username" required autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <div style="position:relative;">
+                        <input type="password" id="loginPassword" class="form-input" placeholder="Enter your password" required autocomplete="current-password">
+                        <button type="button" class="password-toggle" data-target="loginPassword" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:18px;opacity:0.6;color:var(--text-primary);">Show</button>
+                    </div>
+                </div>
+                <div class="form-group" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:20px;">
+                    <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer;flex-shrink:0;white-space:nowrap;">
+                        <input type="checkbox" id="rememberMe" checked>
+                        <span style="font-weight:normal;color:var(--text-secondary);white-space:nowrap;">Remember me</span>
+                    </label>
+                    <a href="#" class="forgot-password" id="forgotPasswordLink" style="color:var(--blue);text-decoration:none;font-size:14px;">Forgot password?</a>
+                </div>
+                <button type="submit" class="btn btn-primary" id="loginBtn" style="width:100%;">
+                    <span class="btn-text">Login</span>
+                    <span class="btn-loader hidden"><span class="spinner"></span></span>
+                </button>
+                <div id="loginError" class="error hidden" role="status" aria-live="polite"></div>
+                <div id="loginSuccess" class="success hidden" role="status" aria-live="polite"></div>
+            </form>
+
+            <form id="registerForm" class="auth-form" role="tabpanel" aria-labelledby="tab-register" hidden>
+                <div class="form-group">
+                    <label for="regEmail">Email *</label>
+                    <input type="email" id="regEmail" class="form-input" placeholder="Enter your email" required autocomplete="email">
+                    <small>We'll send a verification link to this email</small>
+                </div>
+                <div class="form-group">
+                    <label for="regUsername">Username *</label>
+                    <input type="text" id="regUsername" class="form-input" placeholder="Choose a username" required pattern="^[a-zA-Z0-9_]{3,50}$" autocomplete="username" minlength="3" maxlength="50">
+                    <small>3-50 characters, letters, numbers, and underscores only</small>
+                </div>
+                <div class="form-group">
+                    <label for="regDisplayName">Display Name *</label>
+                    <input type="text" id="regDisplayName" class="form-input" placeholder="Your display name" required minlength="2" maxlength="100">
+                </div>
+                <div class="form-group">
+                    <label for="regPassword">Password *</label>
+                    <div style="position:relative;">
+                        <input type="password" id="regPassword" class="form-input" placeholder="Create a strong password" required autocomplete="new-password" minlength="8">
+                        <button type="button" class="password-toggle" data-target="regPassword" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:18px;opacity:0.6;color:var(--text-primary);">Show</button>
+                    </div>
+                    <div class="password-strength" style="margin-top:8px;">
+                        <div class="strength-bar" style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:6px;">
+                            <div class="strength-fill" id="strengthFill" style="height:100%;width:0;transition:all 0.3s ease;border-radius:2px;"></div>
+                        </div>
+                        <small class="strength-text" id="strengthText" style="font-size:12px;color:var(--text-muted);">Password strength: Weak</small>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="regConfirmPassword">Confirm Password *</label>
+                    <div style="position:relative;">
+                        <input type="password" id="regConfirmPassword" class="form-input" placeholder="Confirm your password" required autocomplete="new-password" minlength="8">
+                        <button type="button" class="password-toggle" data-target="regConfirmPassword" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:18px;opacity:0.6;color:var(--text-primary);">Show</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-weight:normal;">
+                        <input type="checkbox" id="agreeTerms" required style="margin-top:2px;">
+                        <span style="color:var(--text-secondary);">I agree to the <a href="terms.html" target="_blank" rel="noopener" style="color:var(--blue);">Terms of Service</a> and <a href="privacy.html" target="_blank" rel="noopener" style="color:var(--blue);">Privacy Policy</a></span>
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-primary" id="registerBtn" style="width:100%;">
+                    <span class="btn-text">Create Account</span>
+                    <span class="btn-loader hidden"><span class="spinner"></span></span>
+                </button>
+                <div id="registerError" class="error hidden" role="status" aria-live="polite"></div>
+                <div id="registerSuccess" class="success hidden" role="status" aria-live="polite"></div>
+            </form>
+
+            <div id="verificationPending" class="hidden" style="text-align:center;padding:40px 30px;">
+                <h2 style="font-size:24px;margin-bottom:16px;">Verify Your Email</h2>
+                <p style="margin-bottom:12px;color:var(--text-secondary);">We've sent a verification link to <strong id="verificationEmail" style="color:var(--blue);"></strong></p>
+                <p style="margin-bottom:24px;color:var(--text-secondary);">Please check your inbox and click the link to verify your account.</p>
+                <div style="display:flex;flex-direction:column;gap:12px;">
+                    <button id="resendVerification" class="btn btn-secondary">Resend Email</button>
+                    <button id="changeEmail" class="btn" style="background:transparent;color:var(--blue);">Change Email</button>
+                </div>
+                <small style="display:block;margin-top:16px;color:var(--text-muted);">Didn't receive the email? Check your spam folder.</small>
+            </div>
+
+            <div id="verificationStatus" class="hidden" style="text-align:center;padding:40px 30px;">
+                <div class="loading-indicator"><div class="spinner"></div><p>Verifying your email...</p></div>
+            </div>
+
+            <div id="verificationSuccess" class="hidden" style="text-align:center;padding:40px 30px;">
+                <h2 style="font-size:24px;margin-bottom:16px;color:var(--green);">Email Verified!</h2>
+                <p style="margin-bottom:24px;color:var(--text-secondary);">Your email has been successfully verified. You can now login to your account.</p>
+                <button type="button" data-action="show-login" class="btn btn-primary" style="width:100%;">Go to Login</button>
+            </div>
+
+            <div id="verificationError" class="hidden" style="text-align:center;padding:40px 30px;">
+                <h2 style="font-size:24px;margin-bottom:16px;color:var(--red);">Verification Failed</h2>
+                <p id="verificationErrorMessage" style="margin-bottom:24px;color:var(--text-secondary);"></p>
+                <div style="display:flex;flex-direction:column;gap:12px;">
+                    <button type="button" data-action="show-login" class="btn btn-primary">Go to Login</button>
+                    <button id="resendFromError" class="btn btn-secondary">Resend Verification Email</button>
+                </div>
+            </div>
+
+            <form id="resetPasswordForm" class="auth-form hidden">
+                <button type="button" class="back-btn" id="backToLogin" style="background:none;border:none;color:var(--blue);font-size:14px;cursor:pointer;padding:8px 0;margin-bottom:16px;display:flex;align-items:center;gap:4px;">Back to Login</button>
+                <h2 style="font-size:24px;margin-bottom:12px;">Reset Password</h2>
+                <p style="margin-bottom:24px;color:var(--text-muted);">Enter your email address and we'll send you a link to reset your password.</p>
+                <div class="form-group">
+                    <label for="resetEmail">Email</label>
+                    <input type="email" id="resetEmail" class="form-input" placeholder="Enter your email" required>
+                </div>
+                <button type="submit" class="btn btn-primary" id="resetBtn" style="width:100%;">
+                    <span class="btn-text">Send Reset Link</span>
+                    <span class="btn-loader hidden"><span class="spinner"></span></span>
+                </button>
+                <div id="resetError" class="error hidden"></div>
+                <div id="resetSuccess" class="success hidden"></div>
+            </form>
+
+            <form id="newPasswordForm" class="auth-form hidden">
+                <h2 style="font-size:24px;margin-bottom:12px;">Reset Your Password</h2>
+                <p style="margin-bottom:24px;color:var(--text-muted);">Enter your new password below.</p>
+                <div class="form-group">
+                    <label for="newPassword">New Password *</label>
+                    <div style="position:relative;">
+                        <input type="password" id="newPassword" class="form-input" placeholder="Enter new password" required minlength="8" autocomplete="new-password">
+                        <button type="button" class="password-toggle" data-target="newPassword" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:18px;opacity:0.6;color:var(--text-primary);">Show</button>
+                    </div>
+                    <div class="password-strength" style="margin-top:8px;">
+                        <div class="strength-bar" style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:6px;">
+                            <div class="strength-fill" id="newPasswordStrengthFill" style="height:100%;width:0;transition:all 0.3s ease;border-radius:2px;"></div>
+                        </div>
+                        <small class="strength-text" id="newPasswordStrengthText" style="font-size:12px;color:var(--text-muted);">Password strength: Weak</small>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="confirmNewPassword">Confirm Password *</label>
+                    <div style="position:relative;">
+                        <input type="password" id="confirmNewPassword" class="form-input" placeholder="Confirm new password" required minlength="8" autocomplete="new-password">
+                        <button type="button" class="password-toggle" data-target="confirmNewPassword" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:18px;opacity:0.6;color:var(--text-primary);">Show</button>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" id="newPasswordBtn" style="width:100%;">
+                    <span class="btn-text">Reset Password</span>
+                    <span class="btn-loader hidden"><span class="spinner"></span></span>
+                </button>
+                <div id="newPasswordError" class="error hidden"></div>
+            </form>
+
+            <div id="successPanel" class="hidden" style="text-align:center;padding:40px 30px;">
+                <h2 style="font-size:24px;margin-bottom:16px;color:var(--green);">Password Reset!</h2>
+                <p style="margin-bottom:24px;color:var(--text-secondary);">Your password has been successfully reset. You can now login with your new password.</p>
+                <button type="button" data-action="show-login" class="btn btn-primary" style="width:100%;">Go to Login</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="common.js"></script>
+    <script src="auth.js"></script>
+</body>
+</html>

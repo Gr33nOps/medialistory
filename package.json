@@ -1,0 +1,55 @@
+{
+  "name": "my-game-list",
+  "version": "1.0.0",
+  "description": "Game tracker app powered by the IGDB (Twitch) API. Node/Express backend on Supabase Postgres with a static vanilla-JS frontend.",
+  "main": "Backend/server.js",
+  "scripts": {
+    "start": "node Backend/server.js",
+    "dev": "nodemon Backend/server.js",
+    "test": "node --test ./test/unit/*.test.js ./test/smoke/*.test.js",
+    "test:e2e": "playwright test"
+  },
+
+  "keywords": [
+    "games",
+    "igdb",
+    "twitch",
+    "supabase",
+    "express"
+  ],
+  "author": "Gr33nOps",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Gr33nOps/MyGameList.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Gr33nOps/MyGameList/issues"
+  },
+  "homepage": "https://my-game-list-live.vercel.app",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.95.3",
+    "compression": "^1.8.1",
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^5.2.1",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "knex": "^3.1.0",
+    "morgan": "^1.10.0",
+    "node-fetch": "^2.7.0",
+    "pg": "^8.18.0"
+  },
+  "optionalDependencies": {
+    "ioredis": "^5.6.1",
+    "mysql2": "^3.17.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}

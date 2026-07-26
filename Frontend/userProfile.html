@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>User profile - My Game List</title>
+    <meta name="description" content="Track, rate, and share your video game collection with My Game List.">
+    <meta name="robots" content="noindex,nofollow">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+    .cl-acc-list-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 25px 30px;
+        background: linear-gradient(135deg, var(--bg-deep) 0%, var(--bg-card) 100%);
+        border-bottom: 1px solid var(--border);
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+    .cl-acc-list-header-inputs {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex: 1;
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+    .cl-acc-list-header-inputs .search-input {
+        flex: 1;
+        min-width: 160px;
+    }
+    .my-games-section .status-tabs,
+    .cl-acc-status-tabs {
+        display: flex;
+        gap: 0;
+        flex-wrap: wrap;
+        border-bottom: 2px solid var(--border);
+        padding: 0 30px;
+        background: linear-gradient(135deg, var(--bg-deep) 0%, var(--bg-card) 100%);
+        margin: 0;
+    }
+    .my-games-section .status-tab,
+    .cl-acc-status-tabs .status-tab {
+        padding: 14px 20px;
+        font-size: 14px;
+        font-weight: 500;
+        background: transparent;
+        border: none;
+        border-bottom: 3px solid transparent;
+        margin-bottom: -2px;
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: var(--transition);
+    }
+    .my-games-section .status-tab:hover,
+    .cl-acc-status-tabs .status-tab:hover {
+        color: var(--text-primary);
+        background: rgba(59, 130, 246, 0.1);
+    }
+    .my-games-section .status-tab.active,
+    .cl-acc-status-tabs .status-tab.active {
+        color: var(--blue);
+        border-bottom-color: var(--blue);
+        background: rgba(59, 130, 246, 0.1);
+    }
+    .coll-item.list-item,
+    .coll-item.cl-list-item {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 16px 30px;
+        border-bottom: 1px solid var(--border-subtle);
+        transition: var(--transition-fast);
+        cursor: pointer;
+    }
+    .coll-item.list-item:last-child,
+    .coll-item.cl-list-item:last-child { border-bottom: none; }
+    .coll-item.list-item:hover,
+    .coll-item.cl-list-item:hover { background: rgba(59, 130, 246, 0.06); }
+    .coll-item.list-item .coll-item-img,
+    .coll-item.cl-list-item .coll-item-img {
+        width: 64px;
+        height: 64px;
+        object-fit: cover;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+        flex-shrink: 0;
+        background: var(--bg-deep);
+    }
+    .coll-item.list-item .coll-item-body,
+    .coll-item.cl-list-item .coll-item-body {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        min-width: 0;
+    }
+    .coll-item.list-item .coll-item-main,
+    .coll-item.cl-list-item .coll-item-main { flex: 1; min-width: 0; }
+    .coll-item.list-item .coll-item-name,
+    .coll-item.cl-list-item .coll-item-name {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 6px;
+    }
+    .coll-item.list-item .coll-item-meta,
+    .coll-item.cl-list-item .coll-item-meta {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.82rem;
+        color: var(--text-muted);
+    }
+    .coll-item.list-item .coll-item-right,
+    .coll-item.cl-list-item .coll-item-right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-shrink: 0;
+    }
+    .coll-item.list-item .coll-score-badge,
+    .coll-item.cl-list-item .coll-score-badge {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--blue-light);
+        background: var(--blue-dim);
+        border: 1px solid var(--blue-glow);
+        border-radius: var(--radius-md);
+        padding: 6px 14px;
+        min-width: 48px;
+        text-align: center;
+    }
+    @media (max-width: 768px) {
+        .cl-acc-list-header {
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 16px 20px;
+        }
+        .cl-acc-list-header-inputs { width: 100%; }
+    }
+    </style>
+</head>
+<body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <div id="main-content" tabindex="-1" class="container">
+
+        <nav class="navbar" id="appNav" data-active="" data-brand="My Game List"></nav>
+
+        <div class="profile-section">
+            <div class="profile-header">
+                <h2 id="profileTitle">User Profile</h2>
+            </div>
+
+            <div class="profile-content">
+                <div class="profile-avatar-section">
+                    <div class="profile-avatar">
+                        <img id="userAvatar" src="" alt="Profile Avatar"
+                             onerror="this.src='https://ui-avatars.com/api/?name=User&size=200&background=3b82f6&color=fff&bold=true'">
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:20px;">
+                        <div class="profile-stats">
+                            <div class="stat-item">
+                                <span class="stat-value" id="userLevel">1</span>
+                                <span class="stat-label">Level</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-value" id="totalGames">0</span>
+                                <span class="stat-label">Games Played</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-value" id="followersCount">0</span>
+                                <span class="stat-label">Followers</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-value" id="followingCount">0</span>
+                                <span class="stat-label">Following</span>
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <button id="followActionBtn" class="btn btn-success btn-sm">Follow</button>
+                            <button id="shareProfileBtn" class="btn btn-secondary btn-sm">Share Profile</button>
+                            <span id="shareFeedback" style="display:none; color:#a7f3d0; font-size:0.85rem; font-weight:600;">Copied!</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="profile-details">
+                    <div class="detail-item">
+                        <label>Display Name</label>
+                        <div class="detail-value" id="displayName">-</div>
+                    </div>
+                    <div class="detail-item">
+                        <label>Username</label>
+                        <div class="detail-value" id="displayUsername">-</div>
+                    </div>
+                    <div class="detail-item">
+                        <label>Member Since</label>
+                        <div class="detail-value" id="displayCreatedAt">-</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="page-tabs" role="tablist" aria-label="Profile sections">
+            <button type="button" class="page-tab active" role="tab" id="upTabBtnCollection" data-tab="collection" aria-controls="tab-collection" aria-selected="true">Game Collection</button>
+            <button type="button" class="page-tab" role="tab" id="upTabBtnLists" data-tab="lists" aria-controls="tab-lists" aria-selected="false" tabindex="-1">Custom Lists</button>
+        </div>
+
+        <div class="tab-panel active" id="tab-collection" role="tabpanel" aria-labelledby="upTabBtnCollection">
+            <div class="my-games-section">
+                <div class="list-header">
+                    <h2 id="gameListTitle">Game Collection</h2>
+                    <div class="list-header-actions">
+                        <label class="sr-only" for="userGamesSearch">Search games</label>
+                        <input type="text" id="userGamesSearch" class="search-input" placeholder="Search games..." aria-label="Search games">
+                        <label class="sr-only" for="userGamesSort">Sort games</label>
+                        <select id="userGamesSort" class="filter-select" aria-label="Sort games">
+                            <option value="recently_added">Recently Added</option>
+                            <option value="name">Name (A-Z)</option>
+                            <option value="name_desc">Name (Z-A)</option>
+                            <option value="score_high">Score (High to Low)</option>
+                            <option value="score_low">Score (Low to High)</option>
+                            <option value="rating_high">Rating (High to Low)</option>
+                            <option value="rating_low">Rating (Low to High)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="status-tabs">
+                    <button class="status-tab active" data-status="all">All Games</button>
+                    <button class="status-tab" data-status="playing">Playing</button>
+                    <button class="status-tab" data-status="completed">Completed</button>
+                    <button class="status-tab" data-status="plan_to_play">Plan to Play</button>
+                    <button class="status-tab" data-status="on_hold">On Hold</button>
+                    <button class="status-tab" data-status="dropped">Dropped</button>
+                </div>
+
+                <div id="userGamesList" class="my-games-list"></div>
+            </div>
+        </div>
+
+        <div class="tab-panel" id="tab-lists" role="tabpanel" aria-labelledby="upTabBtnLists" hidden>
+            <div class="my-games-section">
+                <div class="list-header">
+                    <h2 id="customListsTitle">Custom Lists</h2>
+                </div>
+                <div id="upAccordion" class="my-games-list"></div>
+            </div>
+        </div>
+
+        <div id="gameModal" class="modal" hidden role="dialog">
+            <div class="modal-content">
+                <button class="close-btn" id="closeModalBtn">x</button>
+                <div id="gameDetails"></div>
+            </div>
+        </div>
+
+        <div class="cl-game-modal-overlay" id="clGameModal">
+            <div class="cl-game-modal-box">
+                <button class="cl-game-modal-close-btn" id="clGameModalClose">x</button>
+                <div id="clGameDetails"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="cl-toast" id="clToast" role="status" aria-live="polite"></div>
+
+    <script src="common.js"></script>
+    <script src="userProfile.js"></script>
+</body>
+</html>

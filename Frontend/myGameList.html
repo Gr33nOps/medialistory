@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>My collection - My Game List</title>
+    <meta name="description" content="Track, rate, and share your video game collection with My Game List.">
+    <meta name="robots" content="noindex,nofollow">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <div id="main-content" tabindex="-1" class="container">
+        <nav class="navbar" id="appNav" data-active="list" data-brand="My Game List"></nav>
+
+        <div class="page-tabs" role="tablist" aria-label="My list sections">
+            <button type="button" class="page-tab active" role="tab" id="tabBtnCollection" data-tab="collection" aria-controls="tab-collection" aria-selected="true">My Collection</button>
+            <button type="button" class="page-tab" role="tab" id="tabBtnLists" data-tab="lists" aria-controls="tab-lists" aria-selected="false" tabindex="-1">Custom Lists</button>
+        </div>
+
+        <div class="tab-panel active" id="tab-collection" role="tabpanel" aria-labelledby="tabBtnCollection">
+
+            <div class="stats-dashboard">
+                <h2 class="stats-title">Game Collection Statistics</h2>
+                <div class="combined-chart">
+
+                    <div class="bar-chart-section">
+                        <div class="progress-bar-item">
+                            <div class="bar-label">
+                                <span class="status-dot playing"></span>
+                                <span>Playing</span>
+                            </div>
+                            <div class="bar-container">
+                                <div class="bar-fill playing" id="playingBar" style="width:0%"></div>
+                                <span class="bar-percentage" id="playingPercent">0%</span>
+                            </div>
+                        </div>
+                        <div class="progress-bar-item">
+                            <div class="bar-label">
+                                <span class="status-dot completed"></span>
+                                <span>Completed</span>
+                            </div>
+                            <div class="bar-container">
+                                <div class="bar-fill completed" id="completedBar" style="width:0%"></div>
+                                <span class="bar-percentage" id="completedPercent">0%</span>
+                            </div>
+                        </div>
+                        <div class="progress-bar-item">
+                            <div class="bar-label">
+                                <span class="status-dot plan"></span>
+                                <span>Plan to Play</span>
+                            </div>
+                            <div class="bar-container">
+                                <div class="bar-fill plan" id="planBar" style="width:0%"></div>
+                                <span class="bar-percentage" id="planPercent">0%</span>
+                            </div>
+                        </div>
+                        <div class="progress-bar-item">
+                            <div class="bar-label">
+                                <span class="status-dot onhold"></span>
+                                <span>On Hold</span>
+                            </div>
+                            <div class="bar-container">
+                                <div class="bar-fill onhold" id="onholdBar" style="width:0%"></div>
+                                <span class="bar-percentage" id="onholdPercent">0%</span>
+                            </div>
+                        </div>
+                        <div class="progress-bar-item">
+                            <div class="bar-label">
+                                <span class="status-dot dropped"></span>
+                                <span>Dropped</span>
+                            </div>
+                            <div class="bar-container">
+                                <div class="bar-fill dropped" id="droppedBar" style="width:0%"></div>
+                                <span class="bar-percentage" id="droppedPercent">0%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pie-chart-section">
+                        <div class="pie-chart-container">
+                            <svg class="pie-chart" viewBox="0 0 200 200" id="pieChartSvg">
+                                <circle cx="100" cy="100" r="90" fill="#1e2a38" />
+                            </svg>
+                        </div>
+                        <div class="pie-legend" id="pieLegend"></div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="my-games-section">
+                <div class="list-header">
+                    <h2>My Game Collection</h2>
+                    <div class="list-header-actions">
+                        <label class="sr-only" for="myGamesSearch">Search my games</label>
+                        <input type="text" id="myGamesSearch" class="search-input" placeholder="Search games..." aria-label="Search my games">
+                        <select id="myGamesSort" class="filter-select">
+                            <option value="recently_added">Recently Added</option>
+                            <option value="name">Name (A-Z)</option>
+                            <option value="name_desc">Name (Z-A)</option>
+                            <option value="score_high">My Score (High to Low)</option>
+                            <option value="score_low">My Score (Low to High)</option>
+                            <option value="rating_high">Rating (High to Low)</option>
+                            <option value="rating_low">Rating (Low to High)</option>
+                        </select>
+                        <button id="editListBtn" class="btn btn-secondary">Edit</button>
+                        <button id="doneEditingBtn" class="btn btn-success" style="display:none;">Done</button>
+                    </div>
+                </div>
+
+                <div class="status-tabs">
+                    <button class="status-tab active" data-status="all">All Games</button>
+                    <button class="status-tab" data-status="playing">Playing</button>
+                    <button class="status-tab" data-status="completed">Completed</button>
+                    <button class="status-tab" data-status="plan_to_play">Plan to Play</button>
+                    <button class="status-tab" data-status="on_hold">On Hold</button>
+                    <button class="status-tab" data-status="dropped">Dropped</button>
+                </div>
+
+                <div id="myGamesGrid" class="my-games-list"></div>
+            </div>
+
+            <div id="gameModal" class="modal" hidden role="dialog">
+                <div class="modal-content">
+                    <button type="button" class="close-btn" id="closeModalBtn" aria-label="Close">×</button>
+                    <div id="gameDetails"></div>
+                </div>
+            </div>
+
+            <div id="updateModal" class="update-modal">
+                <div class="update-modal-content">
+                    <h3>Update Game</h3>
+                    <p class="update-modal-game-name" id="updateGameName"></p>
+                    <div class="update-form">
+                        <label for="updateStatus">Status:</label>
+                        <select id="updateStatus" class="filter-select update-status-select">
+                            <option value="playing">Playing</option>
+                            <option value="completed">Completed</option>
+                            <option value="plan_to_play">Plan to Play</option>
+                            <option value="on_hold">On Hold</option>
+                            <option value="dropped">Dropped</option>
+                        </select>
+                        <label for="updateScore">Score (1-10, optional):</label>
+                        <div class="score-input-container">
+                            <input type="number" id="updateScore" class="score-input" min="1" max="10" step="1" placeholder="Score">
+                            <div class="score-controls">
+                                <button type="button" class="score-btn" id="updateScoreUpBtn" aria-label="Increase score">+</button>
+                                <button type="button" class="score-btn" id="updateScoreDownBtn" aria-label="Decrease score">−</button>
+                            </div>
+                            <button type="button" class="btn btn-sm score-clear-btn" id="updateScoreClearBtn">No Score</button>
+                        </div>
+                        <div id="updateMessage"></div>
+                    </div>
+                    <div class="update-actions">
+                        <button id="confirmUpdateBtn" class="btn btn-primary">Update</button>
+                        <button id="cancelUpdateBtn" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="removeModal" class="remove-modal">
+                <div class="remove-modal-content">
+                    <h3>Remove Game</h3>
+                    <div class="remove-form">
+                        <p id="removeGameText"></p>
+                        <div id="removeMessage"></div>
+                    </div>
+                    <div class="remove-actions">
+                        <button id="confirmRemoveBtn" class="btn btn-danger">Remove</button>
+                        <button id="cancelRemoveBtn" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="tab-panel" id="tab-lists" role="tabpanel" aria-labelledby="tabBtnLists" hidden>
+
+            <div class="my-games-section">
+                <div class="list-header">
+                    <h2>My Lists</h2>
+                    <div class="list-header-actions">
+                        <button class="btn btn-primary" id="clNewListBtn">+ New List</button>
+                    </div>
+                </div>
+                <div id="clAccordion" class="my-games-list"></div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="cl-game-modal-overlay" id="clGameModal">
+        <div class="cl-game-modal-box">
+            <button class="cl-game-modal-close-btn" id="clGameModalClose">x</button>
+            <div id="clGameDetails"></div>
+        </div>
+    </div>
+
+    <div class="cl-modal-overlay" id="clListFormModal">
+        <div class="cl-modal-box">
+            <button class="cl-modal-close" id="clListFormClose">x</button>
+            <h3 id="clListFormTitle">Create New List</h3>
+
+            <div class="cl-form-group">
+                <label class="cl-form-label" for="clListName">List Name *</label>
+                <input type="text" class="cl-form-input" id="clListName" maxlength="100"
+                       placeholder="e.g. Halloween Picks, Best Co-op...">
+                <div class="cl-char-count" id="clListNameCount">0 / 100</div>
+            </div>
+            <div class="cl-form-group">
+                <label class="cl-form-label" for="clListDesc">Description</label>
+                <textarea class="cl-form-textarea" id="clListDesc" maxlength="500"
+                          placeholder="What is this list about?"></textarea>
+                <div class="cl-char-count" id="clListDescCount">0 / 500</div>
+            </div>
+            <div class="cl-form-group">
+                <div class="cl-toggle-row">
+                    <div>
+                        <div class="cl-toggle-label">Public list</div>
+                        <div class="cl-toggle-sub">Others can see this list on your profile</div>
+                    </div>
+                    <label class="cl-toggle">
+                        <input type="checkbox" id="clListPublic" checked>
+                        <span class="cl-toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="cl-modal-actions">
+                <button class="btn btn-secondary" id="clListFormCancel">Cancel</button>
+                <button class="btn btn-primary" id="clListFormSubmit">Create List</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="cl-modal-overlay" id="clDeleteListModal">
+        <div class="cl-modal-box cl-modal-box-sm">
+            <button class="cl-modal-close" id="clDeleteListClose">x</button>
+            <h3>Delete List</h3>
+            <p class="cl-confirm-text">Delete <strong id="clDeleteListName">this list</strong>?
+               All games in this list will be removed. This cannot be undone.</p>
+            <div class="cl-modal-actions">
+                <button class="btn btn-secondary" id="clDeleteListCancel">Cancel</button>
+                <button class="btn btn-danger btn-sm" id="clDeleteListConfirm">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="clEditGameModal" class="update-modal">
+        <div class="update-modal-content">
+            <h3>Update Game</h3>
+            <p class="update-modal-game-name" id="clEditGameName"></p>
+            <div class="update-form">
+                <label for="clEditStatusSelect">Status:</label>
+                <select id="clEditStatusSelect" class="filter-select update-status-select">
+                    <option value="playing">Playing</option>
+                    <option value="completed">Completed</option>
+                    <option value="plan_to_play">Plan to Play</option>
+                    <option value="on_hold">On Hold</option>
+                    <option value="dropped">Dropped</option>
+                </select>
+                <label for="clEditScoreInput">Score (1-10, optional):</label>
+                <div class="score-input-container">
+                    <input type="number" id="clEditScoreInput" class="score-input" min="1" max="10" step="1" placeholder="Score">
+                    <div class="score-controls">
+                        <button type="button" class="score-btn" id="clEditScoreUpBtn" aria-label="Increase score">+</button>
+                        <button type="button" class="score-btn" id="clEditScoreDownBtn" aria-label="Decrease score">−</button>
+                    </div>
+                    <button type="button" class="btn btn-sm score-clear-btn" id="clEditScoreClearBtn">No Score</button>
+                </div>
+                <div id="clEditGameMessage"></div>
+            </div>
+            <div class="update-actions">
+                <button id="clEditGameSave" class="btn btn-primary">Update</button>
+                <button id="clEditGameCancel" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="cl-modal-overlay" id="clRemoveGameModal">
+        <div class="cl-modal-box cl-modal-box-sm">
+            <button class="cl-modal-close" id="clRemoveGameClose">x</button>
+            <h3>Remove Game</h3>
+            <p class="cl-confirm-text">Remove <strong id="clRemoveGameName">this game</strong> from this list?</p>
+            <div class="cl-modal-actions">
+                <button class="btn btn-secondary" id="clRemoveGameCancel">Cancel</button>
+                <button class="btn btn-danger btn-sm" id="clRemoveGameConfirm">Remove</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="cl-toast" id="clToast" role="status" aria-live="polite"></div>
+
+    <script src="common.js"></script>
+    <script src="myGameList.js"></script>
+</body>
+</html>

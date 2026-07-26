@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>My profile - My Game List</title>
+    <meta name="description" content="Track, rate, and share your video game collection with My Game List.">
+    <meta name="robots" content="noindex,nofollow">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <div id="main-content" tabindex="-1" class="container">
+        <nav class="navbar" id="appNav" data-active="profile" data-brand="My Game List"></nav>
+
+        <div class="profile-section">
+            <div class="profile-header">
+                <h2>My Profile</h2>
+            </div>
+
+            <div id="profileDisplay" class="profile-content">
+                <div class="profile-avatar-section">
+                    <div class="profile-avatar">
+                        <img id="displayAvatar" src="" alt="Profile Avatar" onerror="this.src='https://ui-avatars.com/api/?name=User&size=200&background=3b82f6&color=fff&bold=true'">
+                    </div>
+                    <div class="profile-stats">
+                        <div class="stat-item">
+                            <span class="stat-value" id="userLevel">1</span>
+                            <span class="stat-label">Level</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-value" id="totalGames">0</span>
+                            <span class="stat-label">Games Played</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-value" id="followersCount">0</span>
+                            <span class="stat-label">Followers</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-value" id="followingCount">0</span>
+                            <span class="stat-label">Following</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="profile-details">
+                    <div class="detail-item">
+                        <label>Display Name</label>
+                        <div class="detail-value" id="displayName">-</div>
+                    </div>
+                    <div class="detail-item">
+                        <label>Username</label>
+                        <div class="detail-value" id="displayUsername">-</div>
+                    </div>
+                    <div class="detail-item">
+                        <label>Email</label>
+                        <div class="detail-value" id="displayEmail">-</div>
+                    </div>
+                    <div class="detail-item">
+                        <label>Member Since</label>
+                        <div class="detail-value" id="displayCreatedAt">-</div>
+                    </div>
+                </div>
+
+                <div class="profile-preferences detail-item" style="margin-top:8px;">
+                    <label for="densitySelect">Display density</label>
+                    <select id="densitySelect" class="form-input" style="max-width:240px;">
+                        <option value="comfortable">Comfortable</option>
+                        <option value="compact">Compact</option>
+                    </select>
+                    <small style="display:block;margin-top:6px;color:var(--text-muted);">Applies on this device only.</small>
+                </div>
+
+                <div class="profile-actions">
+                    <button id="editProfileBtn" class="btn btn-primary">Edit Profile</button>
+                    <button id="changePasswordBtn" class="btn btn-secondary">Change Password</button>
+                    <button id="exportDataBtn" class="btn btn-secondary" type="button">Export my data</button>
+                </div>
+            </div>
+
+            <div id="profileEdit" class="profile-content hidden">
+                <form id="editProfileForm">
+                    <div class="edit-avatar-section">
+                        <div class="profile-avatar">
+                            <img id="editAvatarPreview" src="" alt="Profile Avatar" onerror="this.src='https://ui-avatars.com/api/?name=User&size=200&background=3b82f6&color=fff&bold=true'">
+                        </div>
+                        <div class="avatar-input-group">
+                            <label for="editAvatarUrl">Avatar URL</label>
+                            <input type="url" id="editAvatarUrl" class="form-input" placeholder="Enter image URL">
+                            <small>Enter a direct link to your profile image</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="editDisplayName">Display Name</label>
+                        <input type="text" id="editDisplayName" class="form-input" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="editEmail">Email</label>
+                        <input type="email" id="editEmail" class="form-input" required>
+                    </div>
+
+                    <div id="editMessage"></div>
+
+                    <div class="profile-actions">
+                        <button type="submit" class="btn btn-success">Save Changes</button>
+                        <button type="button" id="cancelEditBtn" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="passwordModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="passwordModalTitle">
+            <div class="modal-content password-modal-content">
+                <button type="button" class="close-btn" id="closePasswordModal" aria-label="Close">×</button>
+                <h3 id="passwordModalTitle">Change Password</h3>
+                <form id="changePasswordForm">
+                    <div class="form-group">
+                        <label for="currentPassword">Current Password</label>
+                        <input type="password" id="currentPassword" class="form-input" required autocomplete="current-password">
+                    </div>
+                    <div class="form-group">
+                        <label for="newPassword">New Password</label>
+                        <input type="password" id="newPassword" class="form-input" required minlength="8" autocomplete="new-password">
+                    </div>
+                    <div class="form-group">
+                        <label for="confirmPassword">Confirm New Password</label>
+                        <input type="password" id="confirmPassword" class="form-input" required minlength="8" autocomplete="new-password">
+                    </div>
+                    <div id="passwordMessage"></div>
+                    <div class="modal-actions">
+                        <button type="submit" class="btn btn-primary">Update Password</button>
+                        <button type="button" id="cancelPasswordBtn" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="common.js"></script>
+    <script src="profile.js"></script>
+</body>
+</html>

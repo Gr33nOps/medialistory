@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Following - My Game List</title>
+    <meta name="description" content="Track, rate, and share your video game collection with My Game List.">
+    <meta name="robots" content="noindex,nofollow">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <div id="main-content" tabindex="-1" class="container">
+        <!-- Navigation Bar -->
+        <nav class="navbar" id="appNav" data-active="friends" data-brand="My Game List"></nav>
+
+        <!-- Search Users Section -->
+        <div class="search-container">
+            <div class="search-bar">
+                <label class="sr-only" for="userSearchInput">Search users</label>
+                <input type="text" id="userSearchInput" class="search-input" placeholder="Search for users..." aria-label="Search users">
+                <button type="button" id="searchUsersBtn" class="btn btn-primary">Search</button>
+            </div>
+        </div>
+
+        <!-- Search Results -->
+        <div id="searchResults" class="friends-section hidden">
+            <div class="list-header">
+                <h2>Search Results</h2>
+            </div>
+            <div id="userSearchResults" class="friends-list"></div>
+        </div>
+
+        <!-- Following Section -->
+        <div class="friends-section">
+            <div class="list-header">
+                <h2>Following</h2>
+                <span id="followingCount" class="friends-count">0 following</span>
+            </div>
+            <div id="followingList" class="friends-list"></div>
+        </div>
+    </div>
+
+    <script src="common.js"></script>
+    <script src="friends.js"></script>
+</body>
+</html>

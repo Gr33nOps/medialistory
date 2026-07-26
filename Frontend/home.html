@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Browse games - My Game List</title>
+    <meta name="description" content="Track, rate, and share your video game collection with My Game List.">
+    <meta name="robots" content="noindex,nofollow">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* ── Footer ─────────────────────────────────────────────── */
+        .site-footer {
+            margin-top: 64px;
+            border-top: 1px solid #1e293b;
+            padding: 48px 0 24px;
+            color: #64748b;
+            font-size: 0.85rem;
+        }
+
+        .footer-inner {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 48px;
+            justify-content: space-between;
+            margin-bottom: 36px;
+        }
+
+        /* Brand column */
+        .footer-brand .brand-name {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #e2e8f0;
+            margin-bottom: 10px;
+            letter-spacing: -0.01em;
+        }
+        .footer-brand p {
+            max-width: 240px;
+            line-height: 1.65;
+            color: #64748b;
+        }
+
+        /* Nav columns */
+        .footer-col h4 {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #475569;
+            margin-bottom: 14px;
+        }
+        .footer-col ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .footer-col ul li a {
+            color: #64748b;
+            text-decoration: none;
+            transition: color 0.18s;
+        }
+        .footer-col ul li a:hover {
+            color: #e2e8f0;
+        }
+
+        /* IGDB attribution */
+        .footer-igdb {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 18px;
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            border-radius: 10px;
+            margin-bottom: 28px;
+        }
+        .footer-igdb img {
+            height: 26px;
+            width: auto;
+            flex-shrink: 0;
+        }
+        .footer-igdb-text {
+            font-size: 0.78rem;
+            line-height: 1.6;
+            color: #64748b;
+        }
+        .footer-igdb-text a {
+            color: #3b82f6;
+            text-decoration: none;
+        }
+        .footer-igdb-text a:hover {
+            text-decoration: underline;
+        }
+
+        /* Bottom bar */
+        .footer-bottom {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            justify-content: space-between;
+            padding-top: 20px;
+            border-top: 1px solid #1e293b;
+            font-size: 0.78rem;
+            color: #475569;
+        }
+        .footer-bottom-links {
+            display: flex;
+            gap: 20px;
+        }
+        .footer-bottom-links a {
+            color: #475569;
+            text-decoration: none;
+            transition: color 0.18s;
+        }
+        .footer-bottom-links a:hover {
+            color: #94a3b8;
+        }
+
+        /* Tooltip for disabled links */
+        .footer-disabled {
+            color: #334155;
+            cursor: default;
+            position: relative;
+        }
+        .footer-disabled::after {
+            content: 'Coming soon';
+            position: absolute;
+            bottom: calc(100% + 6px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1e293b;
+            color: #94a3b8;
+            font-size: 0.7rem;
+            padding: 4px 8px;
+            border-radius: 5px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.15s;
+        }
+        .footer-disabled:hover::after {
+            opacity: 1;
+        }
+
+        @media (max-width: 600px) {
+            .footer-inner {
+                gap: 32px;
+            }
+            .footer-col {
+                min-width: 120px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <div id="main-content" tabindex="-1" class="container">
+        <nav class="navbar" id="appNav" data-active="home" data-brand="My Game List"></nav>
+
+        <div class="search-container">
+            <div class="search-bar">
+                <label class="sr-only" for="searchInput">Search games</label>
+                <input type="text" id="searchInput" class="search-input" placeholder="Search for games..." aria-label="Search games">
+                <button id="searchBtn" class="btn btn-primary">Search</button>
+            </div>
+            <div class="search-filters">
+                <label class="sr-only" for="sortBy">Sort games</label>
+                <select id="sortBy" class="filter-select" aria-label="Sort games">
+                    <option value="popularity-desc">Popularity</option>
+                    <option value="release-desc" selected>Newest</option>
+                    <option value="release-asc">Oldest</option>
+                    <option value="name-asc">Name (A-Z)</option>
+                    <option value="name-desc">Name (Z-A)</option>
+                    <option value="coming-soon">Coming Soon</option>
+                </select>
+                <button id="filterBtn" class="btn btn-secondary">Filters</button>
+            </div>
+        </div>
+
+        <div id="filterSection" class="filter-section hidden">
+            <div class="filter-group">
+                <select id="genre" class="filter-select">
+                    <option value="">All Genres</option>
+                </select>
+                <select id="platform" class="filter-select">
+                    <option value="">All Platforms</option>
+                </select>
+                <select id="publisher" class="filter-select">
+                    <option value="">All Publishers</option>
+                </select>
+                <select id="developer" class="filter-select">
+                    <option value="">All Developers</option>
+                </select>
+            </div>
+            <div class="filter-actions">
+                <button id="applyFiltersBtn" class="btn btn-primary">Apply</button>
+                <button id="resetFiltersBtn" class="btn btn-secondary">Reset</button>
+            </div>
+        </div>
+
+        <div id="loadingIndicator" class="loading-indicator" style="display:none;">
+            <div class="spinner"></div>
+            <p>Loading games...</p>
+        </div>
+
+        <div id="searchResults" class="games-grid"></div>
+
+        <div class="pagination" style="margin-top:30px;">
+            <button id="prevPageBtn" class="btn" disabled>Previous</button>
+            <span id="pageInfo" class="page-info">Page 1</span>
+            <button id="nextPageBtn" class="btn">Next</button>
+        </div>
+
+        <div id="gameModal" class="modal" hidden role="dialog">
+            <div class="modal-content">
+                <button type="button" class="close-btn" id="closeModalBtn" aria-label="Close">×</button>
+                <div id="gameDetails"></div>
+            </div>
+        </div>
+
+        <!-- ── FOOTER ───────────────────────────────────────────── -->
+        <footer class="site-footer">
+            <div class="footer-inner">
+
+                <!-- Brand -->
+                <div class="footer-brand">
+                    <div class="brand-name">My Game List</div>
+                    <p>Track the games you play, discover what to play next, and share your collection with friends.</p>
+                </div>
+
+                <!-- Navigation -->
+                <div class="footer-col">
+                    <h4>Navigate</h4>
+                    <ul>
+                        <li><a href="home.html">Browse Games</a></li>
+                        <li><a href="myGameList.html">My Collection</a></li>
+                        <li><a href="profile.html">My Profile</a></li>
+                        <li><a href="friends.html">Following</a></li>
+                    </ul>
+                </div>
+
+                <!-- External -->
+                <div class="footer-col">
+                    <h4>Data &amp; Credits</h4>
+                    <ul>
+                        <li><a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer">IGDB</a></li>
+                        <li><a href="https://www.twitch.tv" target="_blank" rel="noopener noreferrer">Twitch</a></li>
+                        <li><a href="https://api-docs.igdb.com" target="_blank" rel="noopener noreferrer">IGDB API Docs</a></li>
+                    </ul>
+                </div>
+
+            </div>
+
+            <!-- IGDB attribution -->
+            <div class="footer-igdb">
+                <img src="https://www.igdb.com/favicon.ico" alt="IGDB logo" onerror="this.style.display='none'">
+                <div class="footer-igdb-text">
+                    Game data powered by <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer">IGDB (Internet Game Database)</a> - a Twitch service.
+                    Game information, cover images, and metadata are provided via the
+                    <a href="https://api-docs.igdb.com" target="_blank" rel="noopener noreferrer">IGDB API</a>.
+                    All game data and images are the property of their respective owners.
+                </div>
+            </div>
+
+            <!-- Bottom bar -->
+            <div class="footer-bottom">
+                <span>© 2026 My Game List. All rights reserved.</span>
+                <div class="footer-bottom-links">
+                    <a href="privacy.html">Privacy Policy</a>
+                    <a href="terms.html">Terms of Service</a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script src="common.js"></script>
+    <script src="home.js"></script>
+</body>
+</html>
