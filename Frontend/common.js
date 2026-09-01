@@ -1,11 +1,38 @@
 /** Shared frontend helpers: escaping, auth token, API, a11y modals/cards */
 (function (global) {
+  // ── Site config ────────────────────────────────────────────────────
+  // To enable Google Analytics 4, put your measurement ID here (e.g. 'G-ABC123').
+  // Leave empty to disable analytics entirely. Honors Do Not Track.
+  global.MGL_GA_ID = global.MGL_GA_ID || '';
   // Default same-origin `/api` (local + Vercel rewrite). Override with window.MGL_API_BASE
   // only if calling Render directly (e.g. https://xxx.onrender.com/api).
   var API_BASE = (typeof global.MGL_API_BASE === 'string' && global.MGL_API_BASE)
     ? global.MGL_API_BASE.replace(/\/$/, '')
     : '/api';
   var modalState = null;
+
+  // ── Analytics (opt-in) ─────────────────────────────────────────────
+  // No-op until a Google Analytics 4 measurement ID is provided, either via
+  // `window.MGL_GA_ID = 'G-XXXXXXXXXX'` before this script, or a
+  // <meta name="ga-id" content="G-XXXXXXXXXX"> tag. Honors Do Not Track.
+  function initAnalytics() {
+    var id = global.MGL_GA_ID;
+    if (!id) {
+      var m = document.querySelector('meta[name="ga-id"]');
+      if (m) id = m.getAttribute('content');
+    }
+    if (!id || !/^G-[A-Z0-9]+$/i.test(id)) return; // not configured
+    if (navigator.doNotTrack === '1' || global.doNotTrack === '1') return;
+    var s = document.createElement('script');
+    s.async = true;
+    s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(id);
+    document.head.appendChild(s);
+    global.dataLayer = global.dataLayer || [];
+    function gtag() { global.dataLayer.push(arguments); }
+    global.gtag = gtag;
+    gtag('js', new Date());
+    gtag('config', id, { anonymize_ip: true });
+  }
 
   function apiIsCrossOrigin() {
     if (!API_BASE || API_BASE.charAt(0) === '/') return false;
@@ -545,10 +572,12 @@
       document.addEventListener('DOMContentLoaded', function () {
         initDensity();
         mountAppNav();
+        initAnalytics();
       });
     } else {
       initDensity();
       mountAppNav();
+      initAnalytics();
     }
   }
 
