@@ -1,12 +1,18 @@
 /**
- * Shared browse/search/detail/track logic for Movies and Series (TMDB).
- * Mirrors the Games browse UX (home.js) but drives the normalized /api/tmdb proxy.
- * Each page sets window.MEDIA_TYPE ('movie' | 'series') before loading this script.
+ * Shared browse/search/detail/track logic for Movies + Series (TMDB) and Anime (Kitsu).
+ * Mirrors the Games browse UX (home.js) but drives the normalized /api proxies.
+ * Each page sets window.MEDIA_TYPE ('movie' | 'series' | 'anime') before loading this.
  */
 (function () {
-  var MEDIA_TYPE = window.MEDIA_TYPE === 'series' ? 'series' : 'movie';
-  var ENDPOINT = MEDIA_TYPE === 'series' ? '/tmdb/series' : '/tmdb/movies';
-  var NOUN = MEDIA_TYPE === 'series' ? 'series' : 'movies';
+  var TYPES = {
+    movie:  { endpoint: '/tmdb/movies', genres: '/tmdb/genres', genresBody: { media_type: 'movie' },  noun: 'movies' },
+    series: { endpoint: '/tmdb/series', genres: '/tmdb/genres', genresBody: { media_type: 'series' }, noun: 'series' },
+    anime:  { endpoint: '/kitsu/anime', genres: '/kitsu/genres', genresBody: {},                      noun: 'anime' }
+  };
+  var MEDIA_TYPE = TYPES[window.MEDIA_TYPE] ? window.MEDIA_TYPE : 'movie';
+  var CFG = TYPES[MEDIA_TYPE];
+  var ENDPOINT = CFG.endpoint;
+  var NOUN = CFG.noun;
 
   var currentFilters = {};
   var currentSort = 'popularity';
@@ -20,16 +26,24 @@
 
   function byId(id) { return document.getElementById(id); }
 
+  function guest() { return typeof getToken === 'function' ? !getToken() : true; }
+
+  function promptSignIn(message) {
+    if (typeof toast === 'function') toast(message || 'Create a free account to save this.', 'info');
+    setTimeout(function () {
+      window.location.href = (typeof authUrlWithNext === 'function' ? authUrlWithNext() : 'auth.html');
+    }, 900);
+  }
+
   (async function boot() {
     if (typeof ensureSession === 'function') { try { await ensureSession(); } catch (_) {} }
-    if (typeof getToken === 'function' && !getToken()) {
-      window.location.href = (typeof authUrlWithNext === 'function' ? authUrlWithNext() : 'auth.html');
-      return;
+    // Guest mode: browse movies/series without an account. Saving prompts sign-in.
+    if (!guest()) {
+      try {
+        var res = await apiFetch('/auth/me', { cache: 'no-store' });
+        if (res.status === 401 || res.status === 403) { logout(); return; }
+      } catch (_) {}
     }
-    try {
-      var res = await apiFetch('/auth/me', { cache: 'no-store' });
-      if (res.status === 401 || res.status === 403) { logout(); return; }
-    } catch (_) {}
     initPage();
   })();
 
@@ -92,6 +106,7 @@
   function onClick(id, fn) { var el = byId(id); if (el) el.addEventListener('click', fn); }
 
   async function loadUserCustomLists() {
+    if (guest()) { userCustomLists = []; return; }
     try {
       var r = await apiFetch('/user/lists');
       if (r.ok) { var d = await r.json(); userCustomLists = d.lists || []; }
@@ -102,10 +117,10 @@
     var select = byId('genre');
     if (!select) return;
     try {
-      var r = await apiFetch('/tmdb/genres', {
+      var r = await apiFetch(CFG.genres, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ media_type: MEDIA_TYPE })
+        body: JSON.stringify(CFG.genresBody)
       });
       if (!r.ok) return;
       var genres = await r.json();
@@ -238,6 +253,8 @@
       (media.developers && media.developers.length) ? { label: creditLabel, value: media.developers.map(function (d) { return d.name || d; }).join(', ') } : null,
       (media.publishers && media.publishers.length) ? { label: studioLabel, value: media.publishers.map(function (p) { return p.name || p; }).join(', ') } : null,
       (MEDIA_TYPE === 'series' && media.number_of_seasons) ? { label: 'Seasons', value: String(media.number_of_seasons) } : null,
+      ((MEDIA_TYPE === 'series' || MEDIA_TYPE === 'anime') && media.number_of_episodes) ? { label: 'Episodes', value: String(media.number_of_episodes) } : null,
+      (MEDIA_TYPE === 'anime' && media.subtype) ? { label: 'Type', value: String(media.subtype) } : null,
       (MEDIA_TYPE === 'movie' && media.runtime) ? { label: 'Runtime', value: media.runtime + ' min' } : null
     ].filter(Boolean);
 
@@ -272,7 +289,9 @@
       }
     }
 
-    var defaultLabel = MEDIA_TYPE === 'series' ? 'My Series Library (Default)' : 'My Movie Library (Default)';
+    var defaultLabel = MEDIA_TYPE === 'series' ? 'My Series Library (Default)'
+      : MEDIA_TYPE === 'anime' ? 'My Anime Library (Default)'
+      : 'My Movie Library (Default)';
 
     byId('gameDetails').innerHTML =
       '<div class="game-detail-hero">' +
@@ -320,6 +339,8 @@
   function mediaToGameData(media) {
     return {
       media_type: media.media_type,
+      provider: media.provider,
+      provider_id: media.provider_id,
       tmdb_id: media.tmdb_id,
       name: media.name,
       background_image: media.background_image,
@@ -327,6 +348,7 @@
       rating: media.rating,
       metacritic_score: media.metacritic_score,
       released: media.released,
+      number_of_episodes: media.number_of_episodes,
       genres: media.genres || [],
       developers: media.developers || [],
       publishers: media.publishers || []
@@ -334,6 +356,7 @@
   }
 
   async function addToLibrary(ref) {
+    if (guest()) { promptSignIn('Create a free account to build your library.'); return; }
     var media = lastResults[ref];
     if (!media) { if (typeof toast === 'function') toast('Please reopen this title and try again.', 'error'); return; }
 

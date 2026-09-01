@@ -2189,6 +2189,17 @@ select.update-status-select option,
     color: #ffffff;
 }
 
+.oauth-github {
+    background: #24292f;
+    color: #ffffff;
+    border: 1px solid #1b1f24;
+}
+
+.oauth-github:hover:not(:disabled) {
+    background: #1b1f24;
+    color: #ffffff;
+}
+
 .oauth-divider {
     display: flex;
     align-items: center;
@@ -3526,3 +3537,5 @@ a:focus-visible {
 .media-type-game { background: rgba(59,130,246,0.15); color: #60a5fa; border-color: rgba(59,130,246,0.35); }
 .media-type-movie { background: rgba(168,85,247,0.15); color: #c084fc; border-color: rgba(168,85,247,0.35); }
 .media-type-series { background: rgba(34,197,94,0.15); color: #4ade80; border-color: rgba(34,197,94,0.35); }
+
+.media-type-anime { background: rgba(244,114,182,0.15); color: #f472b6; border-color: rgba(244,114,182,0.35); }

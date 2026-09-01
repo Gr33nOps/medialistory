@@ -150,7 +150,7 @@ const db = knex({
 db.raw('SELECT 1')
   .then(() => {
     dbReady = true;
-    console.log('Supabase PostgreSQL connected');
+    console.log('Neon PostgreSQL connected');
   })
   .catch(err => {
     console.error('Database connection failed:', err.message);
@@ -196,6 +196,26 @@ const verifyToken = async (req, res, next) => {
     res.status(401).json({ error: 'Invalid token' });
   }
 };
+
+// Guest-friendly auth: attach req.userId when a valid token is present, otherwise
+// continue as an anonymous visitor. Banned users are still blocked. Used for
+// read-only catalog browse so guests can explore before creating an account.
+const optionalAuth = async (req, res, next) => {
+  const token = getTokenFromRequest(req);
+  if (!token) return next();
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.userId = decoded.userId;
+    try {
+      const row = await db('users').where({ id: req.userId }).first('is_banned');
+      if (row && row.is_banned) return res.status(403).json({ error: 'Your account has been banned' });
+    } catch (_) {}
+    return next();
+  } catch (_) {
+    return next();
+  }
+};
+const passThrough = (req, res, next) => next();
 
 const checkBanned = async (req, res, next) => {
   try {
@@ -370,7 +390,7 @@ try {
 
 try {
   const igdbRoutes = require('./igdb');
-  app.use('/api/igdb', igdbLimiter, igdbRoutes(verifyToken, checkBanned, db));
+  app.use('/api/igdb', igdbLimiter, igdbRoutes(optionalAuth, passThrough, db));
   console.log('  IGDB proxy routes loaded');
 } catch (error) {
   console.error('  Error loading IGDB proxy routes:', error.message);
@@ -379,10 +399,19 @@ try {
 
 try {
   const tmdbRoutes = require('./tmdb');
-  app.use('/api/tmdb', igdbLimiter, tmdbRoutes(verifyToken, checkBanned, db));
+  app.use('/api/tmdb', igdbLimiter, tmdbRoutes(optionalAuth, passThrough, db));
   console.log('  TMDB proxy routes loaded');
 } catch (error) {
   console.error('  Error loading TMDB proxy routes:', error.message);
+  process.exit(1);
+}
+
+try {
+  const kitsuRoutes = require('./kitsu');
+  app.use('/api/kitsu', igdbLimiter, kitsuRoutes(optionalAuth, passThrough, db));
+  console.log('  Kitsu (anime) proxy routes loaded');
+} catch (error) {
+  console.error('  Error loading Kitsu proxy routes:', error.message);
   process.exit(1);
 }
 
@@ -398,6 +427,7 @@ try {
   const moderatorRoutes = require('./moderator');
   const igdbRoutes = require('./igdb');
   const tmdbRoutes = require('./tmdb');
+  const kitsuRoutes = require('./kitsu');
 
   app.use('/api/v1/auth', authLimiter, authRoutes(db, jwt, JWT_SECRET, verifyToken, checkBanned));
   app.use('/api/v1', homeRoutes(db));
@@ -407,8 +437,9 @@ try {
   app.use('/api/v1/users', userProfileRoutes(db, verifyToken, checkBanned));
   app.use('/api/v1/admin', adminRoutes(db, verifyToken, verifyModerator, verifyAdmin, logModeratorActivity));
   app.use('/api/v1/moderator', moderatorRoutes(db, verifyToken, verifyModerator, logModeratorActivity));
-  app.use('/api/v1/igdb', igdbLimiter, igdbRoutes(verifyToken, checkBanned, db));
-  app.use('/api/v1/tmdb', igdbLimiter, tmdbRoutes(verifyToken, checkBanned, db));
+  app.use('/api/v1/igdb', igdbLimiter, igdbRoutes(optionalAuth, passThrough, db));
+  app.use('/api/v1/tmdb', igdbLimiter, tmdbRoutes(optionalAuth, passThrough, db));
+  app.use('/api/v1/kitsu', igdbLimiter, kitsuRoutes(optionalAuth, passThrough, db));
   console.log('  /api/v1 aliases loaded');
 } catch (error) {
   console.error('  Error loading /api/v1 aliases:', error.message);
@@ -438,6 +469,7 @@ app.get('/auth.html', (req, res) => res.sendFile(path.join(frontendPath, 'auth.h
 app.get('/home.html', (req, res) => res.sendFile(path.join(frontendPath, 'home.html')));
 app.get('/movies.html', (req, res) => res.sendFile(path.join(frontendPath, 'movies.html')));
 app.get('/series.html', (req, res) => res.sendFile(path.join(frontendPath, 'series.html')));
+app.get('/anime.html', (req, res) => res.sendFile(path.join(frontendPath, 'anime.html')));
 app.get('/profile.html', (req, res) => res.sendFile(path.join(frontendPath, 'profile.html')));
 app.get('/myGameList.html', (req, res) => res.sendFile(path.join(frontendPath, 'myGameList.html')));
 app.get('/friends.html', (req, res) => res.sendFile(path.join(frontendPath, 'friends.html')));

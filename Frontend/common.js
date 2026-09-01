@@ -437,14 +437,16 @@
   var STATUS_LABELS = {
     game:   { playing: 'Playing', completed: 'Completed', plan_to_play: 'Plan to Play', on_hold: 'On Hold', dropped: 'Dropped' },
     movie:  { playing: 'Watching', completed: 'Watched', plan_to_play: 'Plan to Watch', on_hold: 'On Hold', dropped: 'Dropped' },
-    series: { playing: 'Watching', completed: 'Completed', plan_to_play: 'Plan to Watch', on_hold: 'On Hold', dropped: 'Dropped' }
+    series: { playing: 'Watching', completed: 'Completed', plan_to_play: 'Plan to Watch', on_hold: 'On Hold', dropped: 'Dropped' },
+    anime:  { playing: 'Watching', completed: 'Completed', plan_to_play: 'Plan to Watch', on_hold: 'On Hold', dropped: 'Dropped' }
   };
 
   function mediaTypeLabel(mediaType, plural) {
-    var map = { game: 'Game', movie: 'Movie', series: 'Series' };
+    var map = { game: 'Game', movie: 'Movie', series: 'Series', anime: 'Anime' };
     var base = map[mediaType] || 'Game';
     if (!plural) return base;
-    return mediaType === 'series' ? 'Series' : base + 's';
+    if (mediaType === 'series' || mediaType === 'anime') return base; // uncountable
+    return base + 's';
   }
 
   function statusLabel(status, mediaType) {
@@ -475,22 +477,32 @@
     }
 
     // Three categories of one app: Games (IGDB), Movies + Series (TMDB).
+    var isGuest = !getToken();
+
     var actions =
-      link('home.html', 'games', 'Games') +
       link('movies.html', 'movies', 'Movies') +
       link('series.html', 'series', 'Series') +
-      link('myGameList.html', 'list', 'My Library') +
-      link('friends.html', 'friends', 'Following') +
-      link('profile.html', 'profile', 'Profile');
+      link('anime.html', 'anime', 'Anime') +
+      link('home.html', 'games', 'Games');
 
-    if (user && (user.is_moderator || user.is_admin)) {
-      actions += link('moderator.html', 'moderator', 'Modify');
-    }
-    if (user && user.is_admin) {
-      actions += link('admin.html', 'admin', 'Manage');
-    }
+    if (isGuest) {
+      // Guests can browse everything; account features prompt sign-in.
+      actions += '<a href="auth.html" class="btn btn-primary' + (active === 'auth' ? ' active' : '') + '">Sign in</a>';
+    } else {
+      actions +=
+        link('myGameList.html', 'list', 'My Library') +
+        link('friends.html', 'friends', 'Following') +
+        link('profile.html', 'profile', 'Profile');
 
-    actions += '<button type="button" class="btn btn-danger" id="navLogoutBtn">Logout</button>';
+      if (user && (user.is_moderator || user.is_admin)) {
+        actions += link('moderator.html', 'moderator', 'Modify');
+      }
+      if (user && user.is_admin) {
+        actions += link('admin.html', 'admin', 'Manage');
+      }
+
+      actions += '<button type="button" class="btn btn-danger" id="navLogoutBtn">Logout</button>';
+    }
 
     el.innerHTML =
       '<div class="nav-bar-top">' +
