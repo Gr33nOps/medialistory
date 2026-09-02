@@ -4,6 +4,10 @@
   // To enable Google Analytics 4, put your measurement ID here (e.g. 'G-ABC123').
   // Leave empty to disable analytics entirely. Honors Do Not Track.
   global.MGL_GA_ID = global.MGL_GA_ID || '';
+  // Sentry error tracking. This is the frontend DSN, which is public by design
+  // (it ships to every browser). Set to '' to disable.
+  global.MGL_SENTRY_DSN = global.MGL_SENTRY_DSN ||
+    'https://a031d4f07ac27ac8fd0107e89d564f9a@o4511927699439616.ingest.de.sentry.io/4512013714128976';
   // Default same-origin `/api` (local + Vercel rewrite). Override with window.MGL_API_BASE
   // only if calling Render directly (e.g. https://xxx.onrender.com/api).
   var API_BASE = (typeof global.MGL_API_BASE === 'string' && global.MGL_API_BASE)
@@ -32,6 +36,117 @@
     global.gtag = gtag;
     gtag('js', new Date());
     gtag('config', id, { anonymize_ip: true });
+  }
+
+  // ── Theme (dark default, opt-in light) ────────────────────────────────
+  // The saved theme is applied to <html data-theme> by a tiny inline script in
+  // each page's <head> (before paint, so no flash). These helpers drive the
+  // nav toggle and keep localStorage in sync.
+  var SUN_SVG = '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+  var MOON_SVG = '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+
+  function currentTheme() {
+    try { return localStorage.getItem('theme') === 'light' ? 'light' : 'dark'; }
+    catch (e) { return 'dark'; }
+  }
+  function paintThemeBtn(btn, theme) {
+    // Show the icon for the mode you'd switch TO.
+    btn.innerHTML = theme === 'light' ? MOON_SVG : SUN_SVG;
+    btn.setAttribute('title', theme === 'light' ? 'Switch to dark' : 'Switch to light');
+  }
+  function applyTheme(theme) {
+    var root = document.documentElement;
+    if (theme === 'light') root.setAttribute('data-theme', 'light');
+    else root.removeAttribute('data-theme');
+    try { localStorage.setItem('theme', theme); } catch (e) {}
+    var btn = document.getElementById('navThemeBtn');
+    if (btn) paintThemeBtn(btn, theme);
+  }
+
+  // ── Sentry error tracking (opt-in) ─────────────────────────────────────
+  // No-op until a DSN is configured (global.MGL_SENTRY_DSN or a
+  // <meta name="sentry-dsn">). Uses Sentry's Loader Script so we never pin an
+  // SDK version, buffers errors from the moment it loads, and scrubs anything
+  // sensitive before an event leaves the browser.
+  function initSentry() {
+    var dsn = global.MGL_SENTRY_DSN;
+    if (!dsn) {
+      var m = document.querySelector('meta[name="sentry-dsn"]');
+      if (m) dsn = m.getAttribute('content');
+    }
+    if (!dsn || !/^https:\/\/[^@\s]+@[^/\s]+\/\d+/.test(dsn)) return; // not configured / malformed
+    var publicKey, ingestHost;
+    try {
+      publicKey = dsn.split('//')[1].split('@')[0];
+      ingestHost = dsn.split('@')[1].split('/')[0];
+    } catch (_) { return; }
+    if (!publicKey) return;
+
+    // Region-aware loader host (e.g. an ...ingest.de.sentry.io DSN loads from
+    // js-de.sentry-cdn.com, not the US default).
+    var regionMatch = /\.ingest\.([a-z0-9-]+)\.sentry\.io$/i.exec(ingestHost || '');
+    var region = regionMatch ? regionMatch[1] : '';
+    var cdnHost = (region && region !== 'us') ? ('js-' + region + '.sentry-cdn.com') : 'js.sentry-cdn.com';
+
+    var isLocal = /^(localhost$|127\.|0\.0\.0\.0$|\[?::1)/.test(location.hostname);
+
+    // Configure BEFORE the SDK loads; the loader calls sentryOnLoad instead of
+    // auto-init, so this init is the single source of truth.
+    global.sentryOnLoad = function () {
+      var S = global.Sentry;
+      if (!S || typeof S.init !== 'function') return;
+      var user = (typeof getStoredUser === 'function') ? getStoredUser() : null;
+      // Session Replay masks all text/inputs/media so nothing sensitive is recorded.
+      var integrations = [];
+      try { if (S.replayIntegration) integrations.push(S.replayIntegration({ maskAllText: true, maskAllInputs: true, blockAllMedia: true })); } catch (_) {}
+      try { if (S.browserTracingIntegration) integrations.push(S.browserTracingIntegration()); } catch (_) {}
+      S.init({
+        dsn: dsn,
+        environment: isLocal ? 'development' : 'production',
+        release: 'medialistory@' + (document.documentElement.getAttribute('data-build') || 'web'),
+        sendDefaultPii: false,
+        integrations: integrations,
+        tracesSampleRate: isLocal ? 0 : 0.1,
+        tracePropagationTargets: [location.origin, /\/api\//],
+        replaysSessionSampleRate: isLocal ? 0 : 0.1,
+        replaysOnErrorSampleRate: isLocal ? 0 : 1.0,
+        // Benign / expected noise we never want to page on.
+        ignoreErrors: [
+          'ResizeObserver loop', 'Non-Error promise rejection captured',
+          'AbortError', 'The operation was aborted', 'The user aborted a request',
+          'Load failed', 'NetworkError when attempting to fetch resource',
+          'Failed to fetch'
+        ],
+        denyUrls: [/googletagmanager\.com/i, /google-analytics\.com/i, /translate\.goog/i, /extensions?\//i, /^chrome-extension:\/\//i],
+        beforeSend: function (event, hint) {
+          try {
+            var err = hint && hint.originalException;
+            var msg = (err && err.message) || event.message || '';
+            // Guest-mode 401s and auth-check failures are expected, not bugs.
+            if (/\b401\b|Unauthorized/i.test(msg)) return null;
+            // Never let a session token or email leave the browser.
+            if (event.request && event.request.headers) {
+              delete event.request.headers.Authorization;
+              delete event.request.headers.authorization;
+              delete event.request.headers.Cookie;
+            }
+            var serialized = JSON.stringify(event);
+            if (/authToken|Bearer\s|mgl_token/.test(serialized)) return null;
+          } catch (_) {}
+          return event;
+        }
+      });
+      var pageTag = (document.body && document.body.getAttribute('data-page')) || location.pathname;
+      S.setTag('page', pageTag);
+      if (user && user.id) S.setUser({ id: String(user.id) }); // id only — no email/PII
+    };
+
+    var s = document.createElement('script');
+    s.async = true;
+    s.crossOrigin = 'anonymous';
+    s.src = 'https://' + cdnHost + '/' + encodeURIComponent(publicKey) + '.min.js';
+    s.setAttribute('data-lazy', 'no'); // load the SDK eagerly, not on first error
+    document.head.appendChild(s);
   }
 
   function apiIsCrossOrigin() {
@@ -469,10 +584,10 @@
   };
 
   function mediaTypeLabel(mediaType, plural) {
-    var map = { game: 'Game', movie: 'Movie', series: 'Series', anime: 'Anime' };
+    var map = { game: 'Game', movie: 'Movie', series: 'Show', anime: 'Anime' };
     var base = map[mediaType] || 'Game';
     if (!plural) return base;
-    if (mediaType === 'series' || mediaType === 'anime') return base; // uncountable
+    if (mediaType === 'anime') return base; // uncountable
     return base + 's';
   }
 
@@ -497,66 +612,118 @@
     var brand = el.getAttribute('data-brand') || 'MediaListory';
     var user = getStoredUser();
 
-    function link(href, key, label) {
-      var cls = 'btn btn-secondary' + (active === key ? ' active' : '');
-      return '<a href="' + href + '" class="' + cls + '"' +
+    var isGuest = !getToken();
+    var SEARCH_SVG = '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>';
+
+    // Category tabs (one connected group; only the active one is filled).
+    function tab(href, key, label, cat) {
+      return '<a href="' + href + '" class="nav-tab' + (active === key ? ' active' : '') +
+        '" data-cat="' + cat + '"' + (active === key ? ' aria-current="page"' : '') + '>' + label + '</a>';
+    }
+    // Neutral user-area links (My Library / Following).
+    function ulink(href, key, label) {
+      return '<a href="' + href + '" class="nav-link' + (active === key ? ' active' : '') + '"' +
         (active === key ? ' aria-current="page"' : '') + '>' + label + '</a>';
     }
 
-    // Three categories of one app: Games (IGDB), Movies + Series (TMDB).
-    var isGuest = !getToken();
+    var primary =
+      tab('movies.html', 'movies', 'Movies', 'movies') +
+      tab('series.html', 'series', 'Shows', 'series') +
+      tab('anime.html',  'anime',  'Anime',  'anime') +
+      tab('home.html',   'games',  'Games',  'games');
 
-    var actions =
-      link('movies.html', 'movies', 'Movies') +
-      link('series.html', 'series', 'Series') +
-      link('anime.html', 'anime', 'Anime') +
-      link('home.html', 'games', 'Games');
+    var utils =
+      '<button type="button" class="nav-icon-btn" id="navSearchBtn" aria-label="Search all media" title="Search (press /)">' + SEARCH_SVG + '</button>' +
+      '<button type="button" class="nav-icon-btn" id="navThemeBtn" aria-label="Toggle light or dark theme"></button>';
 
+    var userArea;
     if (isGuest) {
-      // Guests can browse everything; account features prompt sign-in.
-      actions += '<a href="auth.html" class="btn btn-primary' + (active === 'auth' ? ' active' : '') + '">Sign in</a>';
+      userArea = '<a href="auth.html" class="nav-cta' + (active === 'auth' ? ' active' : '') + '">Sign in</a>';
     } else {
-      actions +=
-        link('myGameList.html', 'list', 'My Library') +
-        link('friends.html', 'friends', 'Following') +
-        link('profile.html', 'profile', 'Profile');
+      // Account actions live behind the Profile menu, so Logout stops competing
+      // for attention in the bar and the nav / user areas read as separate groups.
+      var inMenu = (active === 'profile' || active === 'moderator' || active === 'admin');
+      var nameStr = (user && (user.display_name || user.username)) || 'You';
+      var initials = nameStr.trim().slice(0, 2).toUpperCase() || 'U';
 
+      var menuItems =
+        '<a role="menuitem" href="profile.html" class="nav-menu-item' + (active === 'profile' ? ' active' : '') + '">My profile</a>';
       if (user && (user.is_moderator || user.is_admin)) {
-        actions += link('moderator.html', 'moderator', 'Modify');
+        menuItems += '<a role="menuitem" href="moderator.html" class="nav-menu-item' + (active === 'moderator' ? ' active' : '') + '">Moderate</a>';
       }
       if (user && user.is_admin) {
-        actions += link('admin.html', 'admin', 'Manage');
+        menuItems += '<a role="menuitem" href="admin.html" class="nav-menu-item' + (active === 'admin' ? ' active' : '') + '">Admin</a>';
       }
+      menuItems += '<button type="button" role="menuitem" class="nav-menu-item nav-menu-danger" id="navLogoutBtn">Log out</button>';
 
-      actions += '<button type="button" class="btn btn-danger" id="navLogoutBtn">Logout</button>';
+      userArea =
+        ulink('myGameList.html', 'list', 'My Library') +
+        ulink('friends.html', 'friends', 'Following') +
+        '<div class="nav-menu">' +
+          '<button type="button" class="nav-menu-trigger' + (inMenu ? ' active' : '') + '" id="navProfileBtn" aria-haspopup="menu" aria-expanded="false">' +
+            '<span class="nav-ava" aria-hidden="true">' + esc(initials) + '</span>' +
+            '<span class="nav-menu-label">Profile</span>' +
+            '<svg class="nav-caret" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>' +
+          '</button>' +
+          '<div class="nav-menu-pop" id="navProfileMenu" role="menu">' + menuItems + '</div>' +
+        '</div>';
     }
 
     el.innerHTML =
-      '<div class="nav-bar-top">' +
-        '<a class="nav-brand" href="home.html">' + esc(brand) + '</a>' +
-        '<button type="button" class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navActions" aria-label="Open menu">' +
-          '<span class="nav-toggle-bar" aria-hidden="true"></span>' +
-          '<span class="nav-toggle-bar" aria-hidden="true"></span>' +
-          '<span class="nav-toggle-bar" aria-hidden="true"></span>' +
-        '</button>' +
-      '</div>' +
-      '<div class="nav-actions" id="navActions">' + actions + '</div>';
+      '<a class="nav-brand" href="dashboard.html">' + esc(brand) + '</a>' +
+      '<span class="nav-sep" aria-hidden="true"></span>' +
+      '<nav class="nav-primary" aria-label="Categories">' + primary + '</nav>' +
+      '<div class="nav-utils">' + utils + '</div>' +
+      '<div class="nav-user">' + userArea + '</div>' +
+      '<button type="button" class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="appNav" aria-label="Open menu">' +
+        '<span class="nav-toggle-bar" aria-hidden="true"></span>' +
+        '<span class="nav-toggle-bar" aria-hidden="true"></span>' +
+        '<span class="nav-toggle-bar" aria-hidden="true"></span>' +
+      '</button>';
 
     var logoutBtn = document.getElementById('navLogoutBtn');
-    if (logoutBtn) {
-      logoutBtn.addEventListener('click', logoutToAuth);
+    if (logoutBtn) logoutBtn.addEventListener('click', logoutToAuth);
+
+    var searchBtn = document.getElementById('navSearchBtn');
+    if (searchBtn) {
+      searchBtn.addEventListener('click', function () {
+        if (typeof global.__openGlobalSearch === 'function') global.__openGlobalSearch();
+      });
     }
 
+    var themeBtn = document.getElementById('navThemeBtn');
+    if (themeBtn) {
+      paintThemeBtn(themeBtn, currentTheme());
+      themeBtn.addEventListener('click', function () {
+        applyTheme(currentTheme() === 'light' ? 'dark' : 'light');
+      });
+    }
+
+    // Profile dropdown (desktop). On mobile the menu shows inline in the drawer.
+    var profileBtn = document.getElementById('navProfileBtn');
+    var profileMenu = document.getElementById('navProfileMenu');
+    if (profileBtn && profileMenu) {
+      var menuWrap = profileBtn.parentNode;
+      var closeMenu = function () { menuWrap.classList.remove('open'); profileBtn.setAttribute('aria-expanded', 'false'); };
+      profileBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var open = menuWrap.classList.toggle('open');
+        profileBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      document.addEventListener('click', function (e) { if (!menuWrap.contains(e.target)) closeMenu(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
+    }
+
+    // Mobile drawer toggle (hamburger opens category tabs + user links).
     var toggle = document.getElementById('navToggle');
-    var panel = document.getElementById('navActions');
-    if (toggle && panel) {
+    if (toggle) {
       toggle.addEventListener('click', function () {
         var open = el.classList.toggle('is-open');
         toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
         toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
         document.body.classList.toggle('nav-drawer-open', open);
       });
-      panel.querySelectorAll('a, button').forEach(function (node) {
+      el.querySelectorAll('.nav-tab, .nav-link, .nav-menu-item, .nav-cta').forEach(function (node) {
         node.addEventListener('click', function () {
           el.classList.remove('is-open');
           toggle.setAttribute('aria-expanded', 'false');
@@ -567,16 +734,149 @@
     }
   }
 
+  // ── Shared page header (title + subtitle; color comes from page theming) ─
+  // Driven by the nav element's data-page-title / data-page-sub / data-active.
+  function mountPageHeader() {
+    var el = document.getElementById('appNav');
+    if (!el) return;
+    var title = el.getAttribute('data-page-title');
+    if (!title) return;
+    var sub = el.getAttribute('data-page-sub') || '';
+    var active = el.getAttribute('data-active') || '';
+    if (document.body) document.body.setAttribute('data-page', active);
+    // Avoid a duplicate H1: the visible header becomes the page's single H1.
+    var main = document.getElementById('main-content') || document.body;
+    var srH1 = main.querySelector('h1.sr-only');
+    if (srH1) srH1.parentNode.removeChild(srH1);
+    var header = document.createElement('header');
+    header.className = 'page-header';
+    header.setAttribute('data-cat', active);
+    header.innerHTML =
+      '<div class="page-header-main">' +
+        '<h1 class="page-header-title">' + esc(title) + '</h1>' +
+        (sub ? '<p class="page-header-sub">' + esc(sub) + '</p>' : '') +
+      '</div>';
+    el.parentNode.insertBefore(header, el.nextSibling);
+  }
+
+  // ── Global search: a keyboard-driven overlay that searches all four media
+  // types at once and deep-links into the matching title's detail. ──────────
+  function mountGlobalSearch() {
+    if (document.getElementById('globalSearch')) return;
+    var PAGE_FOR = { movie: 'movies.html', series: 'series.html', anime: 'anime.html', game: 'home.html' };
+    var GROUPS = [
+      { cat: 'movie',  label: 'Movies', ep: '/tmdb/movies' },
+      { cat: 'series', label: 'Shows',  ep: '/tmdb/series' },
+      { cat: 'anime',  label: 'Anime',  ep: '/kitsu/anime' },
+      { cat: 'game',   label: 'Games',  ep: '/igdb/games' }
+    ];
+    var overlay = document.createElement('div');
+    overlay.id = 'globalSearch';
+    overlay.className = 'gsearch';
+    overlay.hidden = true;
+    overlay.innerHTML =
+      '<div class="gsearch-box" role="dialog" aria-label="Search">' +
+        '<div class="gsearch-bar">' +
+          '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>' +
+          '<input id="gsearchInput" type="text" placeholder="Search movies, shows, anime, games…" autocomplete="off" aria-label="Search all media" aria-controls="gsearchResults">' +
+          '<button type="button" class="gsearch-esc" id="gsearchClose" aria-label="Close search">Esc</button>' +
+        '</div>' +
+        '<div id="gsearchResults" class="gsearch-results" role="listbox"></div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    var input = overlay.querySelector('#gsearchInput');
+    var resultsEl = overlay.querySelector('#gsearchResults');
+    var timer = null, activeIndex = -1, seq = 0;
+
+    function open() { overlay.hidden = false; document.body.classList.add('gsearch-open'); setTimeout(function () { input.focus(); }, 30); }
+    function close() { overlay.hidden = true; document.body.classList.remove('gsearch-open'); input.value = ''; resultsEl.innerHTML = ''; activeIndex = -1; }
+
+    overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) close(); });
+    overlay.querySelector('#gsearchClose').addEventListener('click', close);
+
+    function normalize(cat, arr) {
+      if (!Array.isArray(arr)) return [];
+      if (cat === 'game') {
+        return arr.map(function (g) {
+          var cover = (g.cover && g.cover.url) ? ('https:' + String(g.cover.url).replace('t_thumb', 't_cover_big')) : (g.background_image || null);
+          return { id: 'igdb_' + g.id, media_type: 'game', name: g.name, background_image: cover, released: g.first_release_date ? new Date(g.first_release_date * 1000).toISOString() : null };
+        }).filter(function (x) { return x.name; });
+      }
+      return arr.map(function (m) { return { id: m.id, media_type: m.media_type || cat, name: m.name, background_image: m.background_image, released: m.released }; })
+                .filter(function (x) { return x.name; });
+    }
+
+    async function doSearch(q) {
+      if (q.length < 2) { resultsEl.innerHTML = '<div class="gsearch-hint">Type at least 2 characters to search.</div>'; return; }
+      var mine = ++seq;
+      resultsEl.innerHTML = '<div class="gsearch-hint">Searching…</div>';
+      var res = await Promise.all(GROUPS.map(function (g) {
+        return apiFetch(g.ep, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ search: q, limit: 6 }) })
+          .then(function (r) { return r.ok ? r.json() : []; }).catch(function () { return []; });
+      }));
+      if (mine !== seq) return; // a newer query superseded this one
+      var html = '', idx = 0;
+      GROUPS.forEach(function (g, i) {
+        var items = normalize(g.cat, res[i]).slice(0, 6);
+        if (!items.length) return;
+        var single = g.label === 'Movies' ? 'Movie' : g.label === 'Shows' ? 'Show' : g.label === 'Games' ? 'Game' : 'Anime';
+        html += '<div class="gsearch-group"><div class="gsearch-group-h">' + esc(g.label) + '</div>';
+        items.forEach(function (it) {
+          var year = it.released ? (' · ' + new Date(it.released).getFullYear()) : '';
+          html += '<a class="gsearch-item" data-idx="' + (idx++) + '" role="option" href="' + PAGE_FOR[it.media_type] + '?open=' + encodeURIComponent(it.id) + '">' +
+            '<img src="' + esc(it.background_image || '/img/no-image.svg') + '" alt="" loading="lazy" onerror="this.src=\'/img/no-image.svg\'">' +
+            '<span class="gsearch-item-txt"><span class="gsearch-item-name">' + esc(it.name) + '</span>' +
+            '<span class="gsearch-item-meta">' + single + esc(year) + '</span></span>' +
+          '</a>';
+        });
+        html += '</div>';
+      });
+      resultsEl.innerHTML = html || '<div class="gsearch-hint">No matches for “' + esc(q) + '”.</div>';
+      activeIndex = -1;
+    }
+
+    function highlight(items) {
+      items.forEach(function (el, i) { el.classList.toggle('active', i === activeIndex); });
+      if (items[activeIndex]) items[activeIndex].scrollIntoView({ block: 'nearest' });
+    }
+
+    input.addEventListener('input', function () {
+      clearTimeout(timer);
+      var q = input.value.trim();
+      timer = setTimeout(function () { doSearch(q); }, 300);
+    });
+    input.addEventListener('keydown', function (e) {
+      var items = resultsEl.querySelectorAll('.gsearch-item');
+      if (e.key === 'ArrowDown') { e.preventDefault(); activeIndex = Math.min(activeIndex + 1, items.length - 1); highlight(items); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); activeIndex = Math.max(activeIndex - 1, 0); highlight(items); }
+      else if (e.key === 'Enter') { var t = items[activeIndex] || items[0]; if (t) window.location.href = t.getAttribute('href'); }
+      else if (e.key === 'Escape') { close(); }
+    });
+    document.addEventListener('keydown', function (e) {
+      if (!overlay.hidden) return;
+      var typing = /^(input|textarea|select)$/i.test((e.target && e.target.tagName) || '') || (e.target && e.target.isContentEditable);
+      if ((e.key === '/' && !typing) || (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); open(); }
+    });
+
+    global.__openGlobalSearch = open;
+  }
+
   if (typeof document !== 'undefined') {
+    initSentry(); // set up as early as possible so init-time errors are caught
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', function () {
         initDensity();
         mountAppNav();
+        mountPageHeader();
+        mountGlobalSearch();
         initAnalytics();
       });
     } else {
       initDensity();
       mountAppNav();
+      mountPageHeader();
+      mountGlobalSearch();
       initAnalytics();
     }
   }

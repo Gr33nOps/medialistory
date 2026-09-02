@@ -112,10 +112,35 @@ function initCollectionTab() {
             tab.classList.add('active');
             tab.setAttribute('aria-selected', 'true');
             currentMediaFilter = tab.dataset.media;
+            // Recolor the whole page accent to the selected category.
+            document.body.setAttribute('data-page', MEDIA_PAGE_KEY[currentMediaFilter] || 'list');
             updateStatistics(filterByMedia(myGamesCache));
             displayMyGames(sortMyGames(myGamesCache));
+            // The category row is shared, so keep the Custom Lists view in sync too.
+            if (clExpandedListId && typeof clRenderAccGames === 'function') {
+                clRenderAccGames(clExpandedListId);
+            }
         });
     });
+
+    // Grid / list view toggle (persisted per device).
+    var viewBtn = document.getElementById('viewToggleBtn');
+    var gridEl = document.getElementById('myGamesGrid');
+    function applyView(mode) {
+        var isGrid = mode === 'grid';
+        if (gridEl) gridEl.classList.toggle('as-grid', isGrid);
+        if (viewBtn) { viewBtn.textContent = isGrid ? 'List' : 'Grid'; viewBtn.setAttribute('aria-pressed', isGrid ? 'true' : 'false'); }
+    }
+    var savedView = 'list';
+    try { if (localStorage.getItem('libraryView') === 'grid') savedView = 'grid'; } catch (_) {}
+    applyView(savedView);
+    if (viewBtn) {
+        viewBtn.addEventListener('click', function() {
+            var next = (gridEl && gridEl.classList.contains('as-grid')) ? 'list' : 'grid';
+            applyView(next);
+            try { localStorage.setItem('libraryView', next); } catch (_) {}
+        });
+    }
 
     document.getElementById('editListBtn').addEventListener('click', function() { toggleEditMode(true); });
     document.getElementById('doneEditingBtn').addEventListener('click', function() { toggleEditMode(false); });
@@ -156,6 +181,11 @@ function initCollectionTab() {
     }
 
     document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('coll-ep-plus')) {
+            e.stopPropagation();
+            incrementEpisode(e.target.dataset.gameId);
+            return;
+        }
         if (e.target.classList.contains('update-btn')) {
             showUpdateModal(e.target.dataset.gameId);
         } else if (e.target.classList.contains('delete-btn')) {
@@ -174,6 +204,7 @@ async function loadMyGames() {
         var data = await response.json();
         if (response.ok) {
             myGamesCache = data.games;
+            updateMediaTabCounts();
             updateStatistics(filterByMedia(data.games));
             displayMyGames(sortMyGames(data.games));
         } else {
@@ -183,6 +214,24 @@ async function loadMyGames() {
         console.error('Load my games error:', error);
         showError(document.getElementById('myGamesGrid'), 'Network error. Please try again.');
     }
+}
+
+var MEDIA_PAGE_KEY = { all: 'list', movie: 'movies', series: 'series', anime: 'anime', game: 'games' };
+var MEDIA_TAB_LABEL = { all: 'All', movie: 'Movies', series: 'Shows', anime: 'Anime', game: 'Games' };
+
+// Populate the per-category count badges on the collection tabs.
+function updateMediaTabCounts() {
+    var games = myGamesCache || [];
+    var counts = { all: games.length, movie: 0, series: 0, anime: 0, game: 0 };
+    games.forEach(function(g) {
+        var t = g.media_type || 'game';
+        if (counts[t] != null) counts[t]++;
+    });
+    document.querySelectorAll('.media-tab').forEach(function(tab) {
+        var m = tab.dataset.media;
+        tab.innerHTML = (MEDIA_TAB_LABEL[m] || m) +
+            ' <span class="mt-count">' + (counts[m] || 0) + '</span>';
+    });
 }
 
 function updateStatistics(games) {
@@ -202,8 +251,46 @@ function updateStatistics(games) {
         on_hold:      pct('on_hold'),
         dropped:      pct('dropped')
     }, stats);
-    updatePieChart(stats);
+
+    // Pie + legend: on "All" show how the library splits across the four
+    // categories (each treated individually); inside a category show its
+    // own status breakdown.
+    var segments;
+    if (currentMediaFilter === 'all') {
+        var all = myGamesCache || [];
+        segments = CAT_META.map(function(c) {
+            return { label: c.label, color: c.color,
+                count: all.filter(function(g) { return (g.media_type || 'game') === c.key; }).length };
+        });
+    } else {
+        segments = STATUS_META.map(function(s) {
+            return { label: s.label, color: s.color, count: stats[s.key] };
+        });
+    }
+    drawPie(segments);
+    drawPieLegend(segments);
+
+    var titleEl = document.querySelector('.stats-title');
+    if (titleEl) {
+        titleEl.textContent = currentMediaFilter === 'all'
+            ? 'Your library at a glance'
+            : MEDIA_TAB_LABEL[currentMediaFilter] + ' status breakdown';
+    }
 }
+
+var CAT_META = [
+    { key: 'movie',  label: 'Movies', color: '#60a5fa' },
+    { key: 'series', label: 'Shows',  color: '#34d399' },
+    { key: 'anime',  label: 'Anime',  color: '#f472b6' },
+    { key: 'game',   label: 'Games',  color: '#fbbf24' }
+];
+var STATUS_META = [
+    { key: 'playing',      label: 'Watching / Playing', color: '#3498db' },
+    { key: 'completed',    label: 'Completed',          color: '#2ecc71' },
+    { key: 'plan_to_play', label: 'Planned',            color: '#9b59b6' },
+    { key: 'on_hold',      label: 'On Hold',            color: '#f39c12' },
+    { key: 'dropped',      label: 'Dropped',            color: '#e74c3c' }
+];
 
 function updateBarChart(percentages, stats) {
     [
@@ -222,32 +309,45 @@ function updateBarChart(percentages, stats) {
     });
 }
 
-function updatePieChart(stats) {
-    var total = stats.total;
+function drawPie(segments) {
+    var svg = document.getElementById('pieChartSvg');
+    if (!svg) return;
+    var total = segments.reduce(function(s, x) { return s + x.count; }, 0);
     if (total === 0) {
-        document.getElementById('pieChartSvg').innerHTML = '<circle cx="100" cy="100" r="90" fill="#1e2a38" />';
+        svg.innerHTML = '<circle cx="100" cy="100" r="90" fill="#1e2a38" />';
         return;
     }
-    var statuses = [
-        { count: stats.playing,      color: '#3498db' },
-        { count: stats.completed,    color: '#2ecc71' },
-        { count: stats.plan_to_play, color: '#9b59b6' },
-        { count: stats.on_hold,      color: '#f39c12' },
-        { count: stats.dropped,      color: '#e74c3c' }
-    ];
-    var currentAngle = -90;
-    var cx = 100, cy = 100, r = 90;
-    var svgPaths = '';
-    statuses.filter(function(s) { return s.count > 0; }).forEach(function(s) {
+    var active = segments.filter(function(s) { return s.count > 0; });
+    // A single non-zero slice is a full circle; a 360-degree arc renders as
+    // nothing, so draw an actual circle instead.
+    if (active.length === 1) {
+        svg.innerHTML = '<circle cx="100" cy="100" r="90" fill="' + active[0].color + '" />';
+        return;
+    }
+    var cur = -90, cx = 100, cy = 100, r = 90, paths = '';
+    active.forEach(function(s) {
         var angle = (s.count / total) * 360;
-        var sa = currentAngle * (Math.PI / 180);
-        var ea = (currentAngle + angle) * (Math.PI / 180);
+        var sa = cur * Math.PI / 180, ea = (cur + angle) * Math.PI / 180;
         var x1 = cx + r * Math.cos(sa), y1 = cy + r * Math.sin(sa);
         var x2 = cx + r * Math.cos(ea), y2 = cy + r * Math.sin(ea);
-        svgPaths += '<path d="M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 + ' A ' + r + ' ' + r + ' 0 ' + (angle > 180 ? 1 : 0) + ' 1 ' + x2 + ' ' + y2 + ' Z" fill="' + s.color + '" />';
-        currentAngle += angle;
+        paths += '<path d="M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 + ' A ' + r + ' ' + r + ' 0 ' + (angle > 180 ? 1 : 0) + ' 1 ' + x2 + ' ' + y2 + ' Z" fill="' + s.color + '" />';
+        cur += angle;
     });
-    document.getElementById('pieChartSvg').innerHTML = svgPaths;
+    svg.innerHTML = paths;
+}
+
+function drawPieLegend(segments) {
+    var el = document.getElementById('pieLegend');
+    if (!el) return;
+    var total = segments.reduce(function(s, x) { return s + x.count; }, 0);
+    el.innerHTML = segments.map(function(s) {
+        var pctNum = total > 0 ? Math.round(s.count / total * 100) : 0;
+        return '<div class="legend-item">' +
+            '<span style="width:14px;height:14px;border-radius:4px;flex-shrink:0;background:' + s.color + ';"></span>' +
+            '<span style="flex:1;color:var(--text-secondary);">' + s.label + '</span>' +
+            '<span style="font-weight:700;color:var(--text-primary);">' + s.count + (total > 0 ? ' (' + pctNum + '%)' : '') + '</span>' +
+            '</div>';
+    }).join('');
 }
 
 function filterByMedia(games) {
@@ -269,7 +369,7 @@ function sortMyGames(games) {
     return sorted;
 }
 
-var STATUS_LABEL = { playing: 'Playing', completed: 'Completed', plan_to_play: 'Plan to Play', on_hold: 'On Hold', dropped: 'Dropped' };
+var STATUS_LABEL = { playing: 'In progress', completed: 'Completed', plan_to_play: 'Planned', on_hold: 'On Hold', dropped: 'Dropped' };
 var STATUS_COLOR = { playing: '#3498db', completed: '#2ecc71', plan_to_play: '#9b59b6', on_hold: '#f39c12', dropped: '#e74c3c' };
 
 function getRatingColor(score) {
@@ -296,12 +396,12 @@ function displayMyGames(games) {
                 : currentMediaFilter === 'series' ? 'series.html'
                 : currentMediaFilter === 'anime' ? 'anime.html' : 'home.html';
             var browseLabel = currentMediaFilter === 'movie' ? 'Browse movies'
-                : currentMediaFilter === 'series' ? 'Browse series'
+                : currentMediaFilter === 'series' ? 'Browse shows'
                 : currentMediaFilter === 'anime' ? 'Browse anime'
-                : currentMediaFilter === 'game' ? 'Browse games' : 'Browse movies, series, anime & games';
+                : currentMediaFilter === 'game' ? 'Browse games' : 'Browse movies, shows, anime & games';
             container.innerHTML = '<div class="coll-empty-state">' +
                 '<div class="coll-empty-icon">Your library is empty</div>' +
-                '<p>Start building your library by browsing and adding games, movies, and series you have enjoyed or want to explore.</p>' +
+                '<p>Start building your library by browsing and adding the movies, shows, anime, and games you have enjoyed or want to explore.</p>' +
                 '<a href="' + browseHref + '" class="btn btn-primary" style="margin-top:16px;">' + browseLabel + '</a>' +
                 '</div>';
             return;
@@ -309,14 +409,16 @@ function displayMyGames(games) {
         var escFn = typeof esc === 'function' ? esc : function (s) { return String(s || ''); };
         var term = escFn(currentSearchTerm);
         var statusLbl = escFn(STATUS_LABEL[currentStatusFilter] || currentStatusFilter);
-        var msg = 'No games found.';
+        var noun = (typeof MEDIA_TAB_LABEL !== 'undefined' && currentMediaFilter !== 'all')
+            ? MEDIA_TAB_LABEL[currentMediaFilter].toLowerCase() : 'titles';
+        var msg = 'Nothing here yet.';
         if (currentSearchTerm && currentStatusFilter !== 'all')
-            msg = 'No games matching "' + term + '" with status "' + statusLbl + '".';
+            msg = 'No ' + noun + ' matching "' + term + '" with status "' + statusLbl + '".';
         else if (currentSearchTerm)
-            msg = 'No games matching "' + term + '".';
+            msg = 'No ' + noun + ' matching "' + term + '".';
         else if (currentStatusFilter !== 'all')
-            msg = 'No games with status "' + statusLbl + '".';
-        container.innerHTML = '<div class="coll-empty-state"><div class="coll-empty-icon">No games found</div><p>' + msg + '</p></div>';
+            msg = 'No ' + noun + ' with status "' + statusLbl + '".';
+        container.innerHTML = '<div class="coll-empty-state"><div class="coll-empty-icon">Nothing here</div><p>' + msg + '</p></div>';
         return;
     }
     container.innerHTML = filtered.map(function(game) { return renderCollectionRow(game); }).join('');
@@ -330,7 +432,14 @@ function renderCollectionRow(game) {
     var imgSrc      = game.background_image || '/img/no-image.svg';
     var progressHtml = '';
     if ((mediaType === 'series' || mediaType === 'anime') && game.episode_count) {
-        progressHtml = '<span class="coll-item-progress">' + (game.progress || 0) + '/' + game.episode_count + ' eps</span>';
+        var prog = game.progress || 0;
+        var pct = Math.min(100, Math.round(prog / game.episode_count * 100));
+        var done = prog >= game.episode_count;
+        progressHtml = '<span class="coll-progress">' +
+            '<span class="coll-progress-bar"><span class="coll-progress-fill" style="width:' + pct + '%"></span></span>' +
+            '<span class="coll-progress-text">' + prog + ' / ' + game.episode_count + ' eps</span>' +
+            (done ? '' : '<button type="button" class="coll-ep-plus" data-game-id="' + game.game_id + '" title="Watched one more episode" aria-label="Add one episode to ' + esc(game.name) + '">+1</button>') +
+        '</span>';
     }
 
     var editActions = isEditMode
@@ -485,6 +594,39 @@ function closeUpdateModal() {
     if (typeof closeModal === 'function') closeModal('updateModal');
     else document.getElementById('updateModal').style.display = 'none';
     currentUpdateGameId = null;
+}
+
+// One-tap "watched one more episode" from the collection row. Auto-completes at
+// the finale and keeps the stats/cards in sync without a reload.
+async function incrementEpisode(gameId) {
+    var game = (myGamesCache || []).find(function(g) { return String(g.game_id) === String(gameId); });
+    if (!game || !game.episode_count) return;
+    var cur = game.progress || 0;
+    if (cur >= game.episode_count) return;
+    var next = cur + 1;
+    var status = game.status;
+    if (next >= game.episode_count && status === 'playing') status = 'completed';
+    try {
+        var r = await fetch(`${API_BASE}/user/games/${gameId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+            body: JSON.stringify({ status: status, score: game.score || null, progress: next })
+        });
+        if (r.ok) {
+            game.progress = next;
+            game.status = status;
+            updateMediaTabCounts();
+            updateStatistics(filterByMedia(myGamesCache));
+            displayMyGames(sortMyGames(myGamesCache));
+            if (typeof toast === 'function') {
+                toast(next >= game.episode_count ? '“' + game.name + '” completed!' : 'Marked episode ' + next + ' of “' + game.name + '”', 'success');
+            }
+        } else if (typeof toast === 'function') {
+            toast('Could not update progress. Please try again.', 'error');
+        }
+    } catch (_) {
+        if (typeof toast === 'function') toast('Network error. Please try again.', 'error');
+    }
 }
 
 async function confirmUpdate() {
@@ -754,6 +896,7 @@ function clRenderAccGames(listId) {
     var f        = clFilters[listId];
     var editMode = clIsEditMode[listId];
     var games    = (clListGames[listId] || []).slice();
+    if (currentMediaFilter !== 'all') games = games.filter(function(g) { return (g.media_type || 'game') === currentMediaFilter; });
     if (f.status !== 'all') games = games.filter(function(g) { return g.status === f.status; });
     if (f.search) games = games.filter(function(g) { return g.name.toLowerCase().includes(f.search); });
     switch (f.sort) {

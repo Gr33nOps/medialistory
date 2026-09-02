@@ -4,19 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>My Library - MediaListory</title>
-    <meta name="description" content="Track, rate, and share the movies, series, anime, and games you love with MediaListory.">
+    <meta name="description" content="Track, rate, and share the movies, shows, anime, and games you love with MediaListory.">
     <meta name="robots" content="noindex,follow">
+    <script>try{if(localStorage.getItem('theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}</script>
     <link rel="stylesheet" href="styles.css">
     <style>
-        .media-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 14px; }
-        .media-tab { padding: 7px 16px; border-radius: 999px; border: 1px solid #263449; background: #0f1a2a; color: #94a3b8; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }
-        .media-tab:hover { color: #e2e8f0; border-color: #3b82f6; }
-        .media-tab.active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
-        .media-type-pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 8px; border: 1px solid transparent; }
-        .media-type-game { background: rgba(59,130,246,0.15); color: #60a5fa; border-color: rgba(59,130,246,0.35); }
-        .media-type-movie { background: rgba(168,85,247,0.15); color: #c084fc; border-color: rgba(168,85,247,0.35); }
-        .media-type-series { background: rgba(34,197,94,0.15); color: #4ade80; border-color: rgba(34,197,94,0.35); }
-        .media-type-anime { background: rgba(244,114,182,0.15); color: #f472b6; border-color: rgba(244,114,182,0.35); }
+        /* Category tabs, pills, and accents come from styles.css (unified). */
         .coll-item-progress { font-size: 0.72rem; color: #94a3b8; margin-left: 8px; }
     </style>
     <!-- seo:start -->
@@ -28,12 +21,25 @@
 <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
     <div id="main-content" tabindex="-1" class="container">
-        <nav class="navbar" id="appNav" data-active="list" data-brand="MediaListory"></nav>
+        <nav class="navbar" id="appNav" data-active="list" data-brand="MediaListory" data-page-title="My Library" data-page-sub="Everything you are tracking, organized by category."></nav>
         <h1 class="sr-only">My library</h1>
+
+        <div class="library-quicklinks">
+            <a href="stats.html" class="btn btn-secondary">Your Stats</a>
+            <a href="calendar.html" class="btn btn-secondary">Release Calendar</a>
+        </div>
 
         <div class="page-tabs" role="tablist" aria-label="My list sections">
             <button type="button" class="page-tab active" role="tab" id="tabBtnCollection" data-tab="collection" aria-controls="tab-collection" aria-selected="true">My Collection</button>
             <button type="button" class="page-tab" role="tab" id="tabBtnLists" data-tab="lists" aria-controls="tab-lists" aria-selected="false" tabindex="-1">Custom Lists</button>
+        </div>
+
+        <div class="media-tabs" role="tablist" aria-label="Filter by category">
+            <button class="media-tab active" data-media="all" role="tab" aria-selected="true">All</button>
+            <button class="media-tab" data-media="movie" role="tab" aria-selected="false">Movies</button>
+            <button class="media-tab" data-media="series" role="tab" aria-selected="false">Shows</button>
+            <button class="media-tab" data-media="anime" role="tab" aria-selected="false">Anime</button>
+            <button class="media-tab" data-media="game" role="tab" aria-selected="false">Games</button>
         </div>
 
         <div class="tab-panel active" id="tab-collection" role="tabpanel" aria-labelledby="tabBtnCollection">
@@ -46,7 +52,7 @@
                         <div class="progress-bar-item">
                             <div class="bar-label">
                                 <span class="status-dot playing"></span>
-                                <span>Playing</span>
+                                <span>In progress</span>
                             </div>
                             <div class="bar-container">
                                 <div class="bar-fill playing" id="playingBar" style="width:0%"></div>
@@ -66,7 +72,7 @@
                         <div class="progress-bar-item">
                             <div class="bar-label">
                                 <span class="status-dot plan"></span>
-                                <span>Plan to Play</span>
+                                <span>Planned</span>
                             </div>
                             <div class="bar-container">
                                 <div class="bar-fill plan" id="planBar" style="width:0%"></div>
@@ -112,7 +118,7 @@
                     <h2>My Library</h2>
                     <div class="list-header-actions">
                         <label class="sr-only" for="myGamesSearch">Search my games</label>
-                        <input type="text" id="myGamesSearch" class="search-input" placeholder="Search games..." aria-label="Search my games">
+                        <input type="text" id="myGamesSearch" class="search-input" placeholder="Search your library..." aria-label="Search your library">
                         <select id="myGamesSort" class="filter-select">
                             <option value="recently_added">Recently Added</option>
                             <option value="name">Name (A-Z)</option>
@@ -122,24 +128,17 @@
                             <option value="rating_high">Rating (High to Low)</option>
                             <option value="rating_low">Rating (Low to High)</option>
                         </select>
+                        <button id="viewToggleBtn" class="btn btn-secondary view-toggle-btn" type="button" title="Switch between grid and list view" aria-pressed="false">Grid</button>
                         <button id="editListBtn" class="btn btn-secondary">Edit</button>
                         <button id="doneEditingBtn" class="btn btn-success" style="display:none;">Done</button>
                     </div>
                 </div>
 
-                <div class="media-tabs" role="tablist" aria-label="Filter by category">
-                    <button class="media-tab active" data-media="all" role="tab" aria-selected="true">All</button>
-                    <button class="media-tab" data-media="movie" role="tab" aria-selected="false">Movies</button>
-                    <button class="media-tab" data-media="series" role="tab" aria-selected="false">Series</button>
-                    <button class="media-tab" data-media="anime" role="tab" aria-selected="false">Anime</button>
-                    <button class="media-tab" data-media="game" role="tab" aria-selected="false">Games</button>
-                </div>
-
                 <div class="status-tabs">
                     <button class="status-tab active" data-status="all">All</button>
-                    <button class="status-tab" data-status="playing">Playing</button>
+                    <button class="status-tab" data-status="playing">In progress</button>
                     <button class="status-tab" data-status="completed">Completed</button>
-                    <button class="status-tab" data-status="plan_to_play">Plan to Play</button>
+                    <button class="status-tab" data-status="plan_to_play">Planned</button>
                     <button class="status-tab" data-status="on_hold">On Hold</button>
                     <button class="status-tab" data-status="dropped">Dropped</button>
                 </div>

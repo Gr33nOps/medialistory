@@ -1,3 +1,4 @@
+require('./instrument'); // MUST run before express is required (Sentry init)
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -15,6 +16,14 @@ require('dotenv').config({
   path: path.resolve(__dirname, '..', '.env'),
   override: false
 });
+
+// Sentry was initialized in ./instrument (before Express). Grab the same
+// instance so we can attach the Express error handler below; null if disabled.
+let Sentry = null;
+try {
+  const S = require('@sentry/node');
+  if (S.getClient && S.getClient()) Sentry = S;
+} catch (_) {}
 
 const REQUIRED_ENV = [
   'DATABASE_URL',
@@ -80,13 +89,14 @@ app.use(helmet({
     useDefaults: true,
     directives: {
       "default-src": ["'self'"],
-      "script-src": ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://www.googletagmanager.com'],
+      "script-src": ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://www.googletagmanager.com', 'https://*.sentry-cdn.com'],
       "style-src": ["'self'", "'unsafe-inline'"],
       "img-src": ["'self'", 'data:', 'https:'],
       "font-src": ["'self'", 'data:'],
-      "connect-src": ["'self'", FRONTEND_URL, NEON_AUTH_ORIGIN, 'https://*.neon.tech', 'https://www.googletagmanager.com', 'https://www.google-analytics.com', 'https://*.google-analytics.com'].filter(Boolean),
+      "connect-src": ["'self'", FRONTEND_URL, NEON_AUTH_ORIGIN, 'https://*.neon.tech', 'https://www.googletagmanager.com', 'https://www.google-analytics.com', 'https://*.google-analytics.com', 'https://*.sentry.io'].filter(Boolean),
       "object-src": ["'none'"],
       "base-uri": ["'self'"],
+      "frame-src": ["https://www.youtube-nocookie.com", 'https://www.youtube.com'],
       "frame-ancestors": ["'none'"]
     }
   }
@@ -126,6 +136,9 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many auth requests, please try again later' },
+  // Safe read-only endpoints called on normal page loads must not count toward
+  // the login/brute-force budget (otherwise navigating hides OAuth buttons etc.).
+  skip: (req) => req.method === 'GET' && ['/public-config', '/session', '/me'].includes(req.path),
   ...(authStore ? { store: authStore } : {})
 });
 
@@ -452,6 +465,7 @@ app.use(express.static(frontendPath, {
   etag: false,
   lastModified: true,
   maxAge: 0,
+  index: false, // '/' is routed to the dashboard below, not the static index.html
   setHeaders(res, filePath) {
     const name = path.basename(filePath).toLowerCase();
     // Avoid stale JS/HTML during local iteration (was causing old home.js + API 304 bugs).
@@ -463,7 +477,7 @@ app.use(express.static(frontendPath, {
   }
 }));
 
-app.get('/', (req, res) => res.sendFile(path.join(frontendPath, 'home.html')));
+app.get('/', (req, res) => res.sendFile(path.join(frontendPath, 'dashboard.html')));
 app.get('/index.html', (req, res) => res.sendFile(path.join(frontendPath, 'home.html')));
 app.get('/auth.html', (req, res) => res.sendFile(path.join(frontendPath, 'auth.html')));
 app.get('/home.html', (req, res) => res.sendFile(path.join(frontendPath, 'home.html')));
@@ -478,7 +492,15 @@ app.get('/admin.html', (req, res) => res.sendFile(path.join(frontendPath, 'admin
 app.get('/moderator.html', (req, res) => res.sendFile(path.join(frontendPath, 'moderator.html')));
 app.get('/terms.html', (req, res) => res.sendFile(path.join(frontendPath, 'terms.html')));
 app.get('/privacy.html', (req, res) => res.sendFile(path.join(frontendPath, 'privacy.html')));
+app.get('/dashboard.html', (req, res) => res.sendFile(path.join(frontendPath, 'dashboard.html')));
+app.get('/stats.html', (req, res) => res.sendFile(path.join(frontendPath, 'stats.html')));
+app.get('/calendar.html', (req, res) => res.sendFile(path.join(frontendPath, 'calendar.html')));
 app.get('/robots.txt', (req, res) => res.sendFile(path.join(frontendPath, 'robots.txt')));
+
+// Sentry error handler must sit after routes and before our own error handler.
+if (Sentry && typeof Sentry.setupExpressErrorHandler === 'function') {
+  Sentry.setupExpressErrorHandler(app);
+}
 
 app.use((err, req, res, next) => {
   if (err && err.message === 'Not allowed by CORS') {

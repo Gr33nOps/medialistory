@@ -287,6 +287,12 @@ function initPage() {
     });
     loadUserCustomLists();
     fetchGames(true);
+
+    // Deep link from the dashboard: ?open=igdb_<id> opens that game's detail.
+    var openRef = new URLSearchParams(window.location.search).get('open');
+    if (openRef && /^igdb_\d+$/i.test(openRef)) {
+        setTimeout(function () { showGameDetails(openRef); }, 250);
+    }
 }
 
 async function loadUserCustomLists() {
@@ -332,12 +338,23 @@ async function loadIGDBFilters() {
     }
 }
 
+function skeletonCards(n) {
+    var one = '<div class="skeleton-card"><div class="skeleton skel-poster"></div>' +
+        '<div class="skel-info"><div class="skeleton skel-line w80"></div><div class="skeleton skel-line w50"></div></div></div>';
+    return new Array(n).join(one) + one;
+}
+
 async function fetchGames(replace) {
     if (replace === undefined) replace = true;
     if (isLoading || (!replace && !hasMoreGames)) return;
     isLoading = true;
 
-    document.getElementById('loadingIndicator').style.display = 'flex';
+    if (replace) {
+        document.getElementById('loadingIndicator').style.display = 'none';
+        document.getElementById('searchResults').innerHTML = skeletonCards(12);
+    } else {
+        document.getElementById('loadingIndicator').style.display = 'flex';
+    }
 
     try {
         var offset           = (currentPage - 1) * apiGamesPerPage;
@@ -546,9 +563,11 @@ function displaySearchResults(games, replace) {
         }
 
         var cardLabel = 'View details for ' + (game.name || 'game');
+        var ratingHtml = game.rating ? '<span class="card-rating">★ ' + esc(Number(game.rating).toFixed(1)) + '</span>' : '';
         return '<div class="game-card" data-game-id="' + esc(game.id) + '" role="button" tabindex="0" aria-label="' + esc(cardLabel) + '">' +
             '<div class="game-image-wrapper">' +
                 '<img src="' + esc(imgSrc) + '" alt="' + esc(game.name || 'Game') + ' cover" class="game-image" loading="lazy" onerror="this.src=\'/img/no-image.svg\'">' +
+                ratingHtml +
             '</div>' +
             '<div class="game-info">' +
                 '<div class="game-title">' + esc(game.name) + '</div>' +

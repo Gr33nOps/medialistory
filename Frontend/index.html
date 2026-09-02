@@ -4,8 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>Games - MediaListory</title>
-    <meta name="description" content="Browse and track games on MediaListory — rate, review, and build one library across movies, series, anime, and games.">
+    <meta name="description" content="Browse and track games on MediaListory. Rate them, take notes, and keep one library for your movies, shows, anime, and games.">
     <meta name="robots" content="index,follow">
+    <script>try{if(localStorage.getItem('theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}</script>
     <link rel="stylesheet" href="styles.css">
     <style>
         /* ── Footer ─────────────────────────────────────────────── */
@@ -162,7 +163,7 @@
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="MediaListory">
     <meta property="og:title" content="Games - MediaListory">
-    <meta property="og:description" content="Browse and track games on MediaListory — rate, review, and build one library across movies, series, anime, and games.">
+    <meta property="og:description" content="Browse and track games on MediaListory. Rate them, take notes, and keep one library for your movies, shows, anime, and games.">
     <meta property="og:url" content="https://medialistory.onrender.com/">
     <meta property="og:image" content="https://medialistory.onrender.com/img/og-card.jpg">
     <meta property="og:image:width" content="1200">
@@ -170,14 +171,14 @@
     <meta property="og:image:type" content="image/jpeg">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Games - MediaListory">
-    <meta name="twitter:description" content="Browse and track games on MediaListory — rate, review, and build one library across movies, series, anime, and games.">
+    <meta name="twitter:description" content="Browse and track games on MediaListory. Rate them, take notes, and keep one library for your movies, shows, anime, and games.">
     <meta name="twitter:image" content="https://medialistory.onrender.com/img/og-card.jpg">
     <!-- seo:end -->
 </head>
 <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
     <div id="main-content" tabindex="-1" class="container">
-        <nav class="navbar" id="appNav" data-active="games" data-brand="MediaListory"></nav>
+        <nav class="navbar" id="appNav" data-active="games" data-brand="MediaListory" data-page-title="Games" data-page-sub="Find your next game and keep track of what you are playing. Game info comes from IGDB."></nav>
         <h1 class="sr-only">Discover and track games</h1>
 
         <div class="search-container">
@@ -189,8 +190,8 @@
             <div class="search-filters">
                 <label class="sr-only" for="sortBy">Sort games</label>
                 <select id="sortBy" class="filter-select" aria-label="Sort games">
-                    <option value="popularity-desc">Popularity</option>
-                    <option value="release-desc" selected>Newest</option>
+                    <option value="popularity-desc" selected>Popularity</option>
+                    <option value="release-desc">Newest</option>
                     <option value="release-asc">Oldest</option>
                     <option value="name-asc">Name (A-Z)</option>
                     <option value="name-desc">Name (Z-A)</option>

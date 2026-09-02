@@ -4,8 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>My profile - MediaListory</title>
-    <meta name="description" content="Track, rate, and share the movies, series, anime, and games you love with MediaListory.">
+    <meta name="description" content="Track, rate, and share the movies, shows, anime, and games you love with MediaListory.">
     <meta name="robots" content="noindex,follow">
+    <script>try{if(localStorage.getItem('theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}</script>
     <link rel="stylesheet" href="styles.css">
     <!-- seo:start -->
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -16,14 +17,10 @@
 <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
     <div id="main-content" tabindex="-1" class="container">
-        <nav class="navbar" id="appNav" data-active="profile" data-brand="MediaListory"></nav>
+        <nav class="navbar" id="appNav" data-active="profile" data-brand="MediaListory" data-page-title="My Profile" data-page-sub="Your stats, activity, and account settings."></nav>
         <h1 class="sr-only">My profile</h1>
 
         <div class="profile-section">
-            <div class="profile-header">
-                <h2>My Profile</h2>
-            </div>
-
             <div id="profileDisplay" class="profile-content">
                 <div class="profile-avatar-section">
                     <div class="profile-avatar">
@@ -69,18 +66,11 @@
                     </div>
                 </div>
 
-                <div class="profile-preferences detail-item" style="margin-top:8px;">
-                    <label for="densitySelect">Display density</label>
-                    <select id="densitySelect" class="form-input" style="max-width:240px;">
-                        <option value="comfortable">Comfortable</option>
-                        <option value="compact">Compact</option>
-                    </select>
-                    <small style="display:block;margin-top:6px;color:var(--text-muted);">Applies on this device only.</small>
-                </div>
-
                 <div class="profile-actions">
                     <button id="editProfileBtn" class="btn btn-primary">Edit Profile</button>
                     <button id="changePasswordBtn" class="btn btn-secondary">Change Password</button>
+                    <a href="stats.html" class="btn btn-secondary">View full stats</a>
+                    <button id="importDataBtn" class="btn btn-secondary" type="button">Import a list</button>
                     <button id="exportDataBtn" class="btn btn-secondary" type="button">Export my data</button>
                 </div>
             </div>
@@ -147,5 +137,6 @@
 
     <script src="common.js"></script>
     <script src="profile.js"></script>
+    <script src="import.js"></script>
 </body>
 </html>

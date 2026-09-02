@@ -4,8 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>Admin - MediaListory</title>
-    <meta name="description" content="Track, rate, and share the movies, series, anime, and games you love with MediaListory.">
+    <meta name="description" content="Track, rate, and share the movies, shows, anime, and games you love with MediaListory.">
     <meta name="robots" content="noindex,follow">
+    <script>try{if(localStorage.getItem('theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}</script>
     <link rel="stylesheet" href="styles.css">
     <style>
         .stat-card {
@@ -66,7 +67,7 @@
 <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
     <div id="main-content" tabindex="-1" class="container">
-        <nav class="navbar" id="appNav" data-active="admin" data-brand="Admin Dashboard"></nav>
+        <nav class="navbar" id="appNav" data-active="admin" data-brand="Admin Dashboard" data-page-title="Admin" data-page-sub="Manage users and site content."></nav>
         <h1 class="sr-only">Admin dashboard</h1>
 
         <div class="admin-stats">
