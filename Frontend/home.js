@@ -14,11 +14,11 @@ let authToken   = localStorage.getItem('authToken');
 let currentUser = readStoredUser();
 let allGames    = [];
 let currentFilters   = {};
-let currentSort      = 'release';
+let currentSort      = 'popularity';
 let currentSortOrder = 'desc';
 let currentPage    = 1;
-let gamesPerPage   = 20;
-let apiGamesPerPage = 20;
+let gamesPerPage   = 24;
+let apiGamesPerPage = 24;
 let isLoading    = false;
 let hasMoreGames = true;
 let retryCount   = 0;
@@ -200,7 +200,7 @@ function initPage() {
 
     var sortBySelect = document.getElementById('sortBy');
     if (sortBySelect) {
-        sortBySelect.value = 'release-desc';
+        sortBySelect.value = 'popularity-desc';
         sortBySelect.addEventListener('change', function() {
             var value = sortBySelect.value;
 
@@ -239,6 +239,23 @@ function initPage() {
     }
 
     document.addEventListener('click', function(e) {
+        // Play the game trailer inline (swap facade for a lazy YouTube embed).
+        var trailerEl = e.target.closest('.detail-trailer');
+        if (trailerEl && trailerEl.dataset.yt && !trailerEl.classList.contains('playing')) {
+            var key = trailerEl.dataset.yt;
+            trailerEl.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(key) +
+                '?autoplay=1&rel=0&modestbranding=1&playsinline=1" title="Trailer" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen loading="lazy"></iframe>';
+            trailerEl.classList.add('playing');
+            return;
+        }
+        // "More like this" opens that game's detail.
+        var simEl = e.target.closest('.detail-similar-card');
+        if (simEl && simEl.dataset.similarRef) {
+            var modalBody = document.querySelector('#gameModal .modal-content');
+            if (modalBody) modalBody.scrollTop = 0;
+            showGameDetails(simEl.dataset.similarRef);
+            return;
+        }
         if (e.target.classList.contains('show-more-btn')) {
             e.stopPropagation();
             var wrap = e.target.closest('.game-card-desc, .game-detail-desc');
@@ -539,29 +556,8 @@ function displaySearchResults(games, replace) {
             releasedHtml = '<span class="game-card-date' + (isComingSoon ? ' is-soon' : '') + '">' + esc(dateStr) + '</span>';
         }
 
-        var genresHtml = (game.genres || []).slice(0, 3).map(function(g) {
-            return '<span class="genre-tag">' + esc(g.name) + '</span>';
-        }).join('');
-
-        var platformsHtml = (game.platforms || []).slice(0, 3).map(function(p) {
-            return '<span class="platform-badge">' + esc(p.name) + '</span>';
-        }).join('');
-
-        var descHtml = '';
-        if (game.description) {
-            var full = String(game.description);
-            if (full.length > 110) {
-                descHtml =
-                    '<p class="game-card-desc">' +
-                        '<span class="desc-short">' + esc(full.slice(0, 110)) + '…</span>' +
-                        '<span class="desc-full hidden">' + esc(full) + '</span> ' +
-                        '<button type="button" class="link-btn show-more-btn">Show more</button>' +
-                    '</p>';
-            } else {
-                descHtml = '<p class="game-card-desc">' + esc(full) + '</p>';
-            }
-        }
-
+        // Poster-first tile: cover + title + year. Genres, platforms and the
+        // summary all live in the detail modal.
         var cardLabel = 'View details for ' + (game.name || 'game');
         var ratingHtml = game.rating ? '<span class="card-rating">★ ' + esc(Number(game.rating).toFixed(1)) + '</span>' : '';
         return '<div class="game-card" data-game-id="' + esc(game.id) + '" role="button" tabindex="0" aria-label="' + esc(cardLabel) + '">' +
@@ -572,9 +568,6 @@ function displaySearchResults(games, replace) {
             '<div class="game-info">' +
                 '<div class="game-title">' + esc(game.name) + '</div>' +
                 '<div class="game-card-meta">' + releasedHtml + '</div>' +
-                '<div class="game-genres">' + genresHtml + '</div>' +
-                (platformsHtml ? '<div class="game-platforms">' + platformsHtml + '</div>' : '') +
-                descHtml +
             '</div>' +
         '</div>';
     }).join('');
@@ -626,6 +619,10 @@ async function showGameDetails(gameId) {
                     igdbScore     = Math.round(igdbGame.aggregated_rating);
                 }
 
+                // Pick the first "Trailer" video, else the first video of any kind.
+                var vids = igdbGame.videos || [];
+                var vid = vids.find(function (v) { return /trailer/i.test(v.name || ''); }) || vids[0];
+
                 game = {
                     id:               gameId,
                     igdb_id:          igdbGame.id,
@@ -647,7 +644,20 @@ async function showGameDetails(gameId) {
                     genres:           igdbGame.genres    || [],
                     platforms:        igdbGame.platforms || [],
                     publishers:       publishers,
-                    developers:       developers
+                    developers:       developers,
+                    game_modes:       (igdbGame.game_modes || []).map(function (m) { return m.name; }).filter(Boolean),
+                    perspectives:     (igdbGame.player_perspectives || []).map(function (p) { return p.name; }).filter(Boolean),
+                    trailer:          vid && vid.video_id ? { key: vid.video_id } : null,
+                    screenshots:      (igdbGame.screenshots || []).slice(0, 8).map(function (s) {
+                        return 'https:' + s.url.replace('t_thumb', 't_screenshot_big');
+                    }),
+                    similar:          (igdbGame.similar_games || []).filter(function (s) { return s.cover; }).slice(0, 12).map(function (s) {
+                        return {
+                            id: 'igdb_' + s.id,
+                            name: s.name,
+                            background_image: 'https:' + s.cover.url.replace('t_thumb', 't_cover_big')
+                        };
+                    })
                 };
             }
         } else {
@@ -686,6 +696,12 @@ async function showGameDetails(gameId) {
                     : null,
                 game.platforms && game.platforms.length
                     ? { label: 'Platforms', value: game.platforms.map(function(p) { return p.name; }).join(' · ') }
+                    : null,
+                game.game_modes && game.game_modes.length
+                    ? { label: 'Modes', value: game.game_modes.join(' · ') }
+                    : null,
+                game.perspectives && game.perspectives.length
+                    ? { label: 'Perspective', value: game.perspectives.join(' · ') }
                     : null
             ].filter(Boolean);
 
@@ -714,6 +730,9 @@ async function showGameDetails(gameId) {
             var releasedBadge = game.released
                 ? '<span class="game-detail-date">' + esc(new Date(game.released).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })) + '</span>'
                 : '';
+            var ratingBadge = game.rating
+                ? '<span class="detail-rating" title="Average rating">★ ' + esc(Number(game.rating).toFixed(1)) + '<span class="dr-sub">/5</span></span>'
+                : '';
 
             var descHtml = '';
             if (game.description) {
@@ -730,6 +749,36 @@ async function showGameDetails(gameId) {
                 }
             }
 
+            var trailerHtml = (game.trailer && game.trailer.key)
+                ? '<div class="detail-section"><h3 class="detail-h">Trailer</h3>' +
+                    '<div class="detail-trailer" data-yt="' + esc(game.trailer.key) + '">' +
+                      '<img src="https://i.ytimg.com/vi/' + esc(game.trailer.key) + '/hqdefault.jpg" alt="Play trailer" loading="lazy">' +
+                      '<span class="detail-trailer-play" aria-hidden="true"></span>' +
+                    '</div>' +
+                    '<a class="detail-trailer-fallback" href="https://www.youtube.com/watch?v=' + esc(game.trailer.key) + '" target="_blank" rel="noopener noreferrer">Trouble playing? Watch on YouTube ↗</a>' +
+                  '</div>'
+                : '';
+
+            var shotsHtml = (game.screenshots && game.screenshots.length)
+                ? '<div class="detail-section"><h3 class="detail-h">Screenshots</h3><div class="detail-shots">' +
+                    game.screenshots.map(function (u) {
+                        return '<a class="detail-shot" href="' + esc(u) + '" target="_blank" rel="noopener noreferrer">' +
+                            '<img src="' + esc(u) + '" alt="Screenshot" loading="lazy" onerror="this.closest(\'.detail-shot\').style.display=\'none\'"></a>';
+                    }).join('') +
+                  '</div></div>'
+                : '';
+
+            var similarHtml = (game.similar && game.similar.length)
+                ? '<div class="detail-section"><h3 class="detail-h">More like this</h3><div class="detail-similar">' +
+                    game.similar.map(function (s) {
+                        return '<button type="button" class="detail-similar-card" data-similar-ref="' + esc(s.id) + '" title="' + esc(s.name) + '">' +
+                            '<img src="' + esc(s.background_image) + '" alt="' + esc(s.name) + '" loading="lazy" onerror="this.src=\'/img/no-image.svg\'">' +
+                            '<span class="ds-name">' + esc(s.name) + '</span>' +
+                        '</button>';
+                    }).join('') +
+                  '</div></div>'
+                : '';
+
             document.getElementById('gameDetails').innerHTML =
                 '<div class="game-detail-hero">' +
                     '<img src="' + esc(heroBg) + '" alt="' + esc(game.name) + ' banner" class="game-detail-hero-img" loading="lazy" onerror="this.src=\'/img/no-image.svg\'">' +
@@ -739,44 +788,46 @@ async function showGameDetails(gameId) {
                         '<img src="' + esc(coverSrc) + '" alt="' + esc(game.name) + ' cover" class="game-detail-cover" loading="lazy" onerror="this.src=\'/img/no-image.svg\'">' +
                         '<div class="game-detail-title-meta">' +
                             '<div class="game-detail-title">' + esc(game.name) + '</div>' +
-                            '<div class="game-detail-badges">' + releasedBadge + '</div>' +
+                            '<div class="game-detail-badges">' + releasedBadge + ratingBadge + '</div>' +
                         '</div>' +
                     '</div>' +
                     genreTagsHtml +
                     infoGridHtml +
                     descHtml +
+                    trailerHtml +
+                    shotsHtml +
                     '<div class="add-to-list">' +
-                        '<h3>Add to My List</h3>' +
+                        '<h3>Add to My Library</h3>' +
                         '<div style="margin-bottom:12px;">' +
-                            '<label style="display:block;font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:6px;">Add to List</label>' +
+                            '<label>Add to list</label>' +
                             '<select id="gameListSelect" class="filter-select" style="width:100%;margin:0;" onchange="handleListSelectChange()">' +
-                                '<option value="default">My Game Collection (Default)</option>' +
+                                '<option value="default">My Games Library (Default)</option>' +
                                 customListOptions +
                             '</select>' +
                         '</div>' +
                         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">' +
                             '<div>' +
-                                '<label style="display:block;font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:6px;">Status</label>' +
+                                '<label>Status</label>' +
                                 '<select id="gameStatus" class="filter-select" style="width:100%;margin:0;">' +
-                                    '<option value="playing">Playing</option>' +
+                                    '<option value="playing">In progress</option>' +
                                     '<option value="completed" selected>Completed</option>' +
-                                    '<option value="plan_to_play">Plan to Play</option>' +
-                                    '<option value="on_hold">On Hold</option>' +
+                                    '<option value="plan_to_play">Planned</option>' +
+                                    '<option value="on_hold">On hold</option>' +
                                     '<option value="dropped">Dropped</option>' +
                                 '</select>' +
                             '</div>' +
                             '<div>' +
-                                '<label style="display:block;font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:6px;">Your Score (1-10)</label>' +
+                                '<label>Your score (1-10)</label>' +
                                 '<div class="score-input-container" style="margin:0;">' +
                                     '<input type="number" id="gameScore" class="score-input" min="1" max="10" placeholder="--" style="width:100%;">' +
                                     '<div class="score-controls">' +
-                                        '<div class="score-btn" id="scoreUpBtn">+</div>' +
-                                        '<div class="score-btn" id="scoreDownBtn">-</div>' +
+                                        '<button type="button" class="score-btn" id="scoreUpBtn" aria-label="Increase score">+</button>' +
+                                        '<button type="button" class="score-btn" id="scoreDownBtn" aria-label="Decrease score">−</button>' +
                                     '</div>' +
                                 '</div>' +
                             '</div>' +
                         '</div>' +
-                        '<div id="customListNote" style="display:none;margin-bottom:12px;padding:10px 14px;background:var(--blue-dim);border:1px solid var(--blue-glow);border-radius:var(--radius-md);font-size:0.82rem;color:var(--blue-light);">' +
+                        '<div id="customListNote" style="display:none;margin-bottom:12px;padding:10px 14px;background:var(--accent-dim);border:1px solid var(--accent-border);border-radius:var(--radius-md);font-size:0.82rem;color:var(--accent-light);">' +
                             'The game will be added to your selected custom list with the status above.' +
                         '</div>' +
                         '<div style="display:flex;align-items:center;gap:12px;">' +
@@ -784,22 +835,14 @@ async function showGameDetails(gameId) {
                             '<span id="addGameMessage" style="font-size:13px;font-weight:600;"></span>' +
                         '</div>' +
                     '</div>' +
+                    similarHtml +
                 '</div>';
 
             if (typeof openModal === 'function') openModal('gameModal');
             else document.getElementById('gameModal').style.display = 'flex';
 
-            document.getElementById('scoreUpBtn').addEventListener('click', function() {
-                var input = document.getElementById('gameScore');
-                if (!input.value) input.value = 1;
-                else if (parseInt(input.value) < 10) input.value = parseInt(input.value) + 1;
-            });
-
-            document.getElementById('scoreDownBtn').addEventListener('click', function() {
-                var input = document.getElementById('gameScore');
-                if (!input.value) input.value = 1;
-                else if (parseInt(input.value) > 1) input.value = parseInt(input.value) - 1;
-            });
+            if (typeof bindScoreInput === 'function') bindScoreInput('gameScore', 'scoreUpBtn', 'scoreDownBtn', null);
+            if (typeof window.enhanceScrollers === 'function') window.enhanceScrollers(document.getElementById('gameDetails'));
         }
     } catch (error) {
         console.error('Show game details error:', error);
@@ -1025,8 +1068,8 @@ function searchGames() {
         currentSort      = 'popularity';
         currentSortOrder = 'desc';
     } else {
-        sortBySelect.value = 'release-desc';
-        currentSort      = 'release';
+        sortBySelect.value = 'popularity-desc';
+        currentSort      = 'popularity';
         currentSortOrder = 'desc';
     }
 

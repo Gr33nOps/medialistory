@@ -116,7 +116,9 @@ function initCollectionTab() {
             document.body.setAttribute('data-page', MEDIA_PAGE_KEY[currentMediaFilter] || 'list');
             updateStatistics(filterByMedia(myGamesCache));
             displayMyGames(sortMyGames(myGamesCache));
-            // The category row is shared, so keep the Custom Lists view in sync too.
+            // The category row is shared, so keep the Custom Lists view in sync too:
+            // filter lists by the chosen category, and re-filter an open list's games.
+            if (typeof clRenderAccordion === 'function' && clLists && clLists.length) clRenderAccordion();
             if (clExpandedListId && typeof clRenderAccGames === 'function') {
                 clRenderAccGames(clExpandedListId);
             }
@@ -197,6 +199,7 @@ function initCollectionTab() {
 }
 
 async function loadMyGames() {
+    if (typeof showSkeleton === 'function') showSkeleton('myGamesGrid', 'rows', 6);
     try {
         var response = await fetch(`${API_BASE}/user/games`, {
             headers: { 'Authorization': `Bearer ${authToken}` }
@@ -243,18 +246,9 @@ function updateStatistics(games) {
         on_hold:      games.filter(function(g) { return g.status === 'on_hold'; }).length,
         dropped:      games.filter(function(g) { return g.status === 'dropped'; }).length
     };
-    var pct = function(k) { return stats.total > 0 ? (stats[k] / stats.total * 100).toFixed(1) : 0; };
-    updateBarChart({
-        playing:      pct('playing'),
-        completed:    pct('completed'),
-        plan_to_play: pct('plan_to_play'),
-        on_hold:      pct('on_hold'),
-        dropped:      pct('dropped')
-    }, stats);
-
-    // Pie + legend: on "All" show how the library splits across the four
-    // categories (each treated individually); inside a category show its
-    // own status breakdown.
+    // Pie + bars share one set of segments: on "All" show how the library
+    // splits across the four categories; inside a category show its own status
+    // breakdown. Bars sit on the left, the pie on the right (classic layout).
     var segments;
     if (currentMediaFilter === 'all') {
         var all = myGamesCache || [];
@@ -267,15 +261,45 @@ function updateStatistics(games) {
             return { label: s.label, color: s.color, count: stats[s.key] };
         });
     }
+    var segTotal = segments.reduce(function(s, x) { return s + x.count; }, 0);
+    drawBars(segments, segTotal);
     drawPie(segments);
-    drawPieLegend(segments);
+
+    var totalEl = document.getElementById('overviewTotal');
+    if (totalEl) {
+        totalEl.innerHTML = '<span class="ov-total-num">' + segTotal + '</span>' +
+            '<span class="ov-total-lbl">' + (segTotal === 1 ? 'title' : 'titles') + '</span>';
+    }
 
     var titleEl = document.querySelector('.stats-title');
     if (titleEl) {
         titleEl.textContent = currentMediaFilter === 'all'
-            ? 'Your library at a glance'
-            : MEDIA_TAB_LABEL[currentMediaFilter] + ' status breakdown';
+            ? 'By category'
+            : MEDIA_TAB_LABEL[currentMediaFilter] + ' · by status';
     }
+}
+
+// Horizontal bars, one per segment, coloured to match the pie slices.
+function drawBars(segments, total) {
+    var el = document.getElementById('overviewBars');
+    if (!el) return;
+    total = total || segments.reduce(function(s, x) { return s + x.count; }, 0);
+    el.innerHTML = segments.map(function(s) {
+        var pctNum = total > 0 ? (s.count / total * 100) : 0;
+        var pctLabel = total > 0 ? Math.round(pctNum) : 0;
+        return '<div class="ov-bar-row">' +
+            '<div class="ov-bar-head">' +
+                '<span class="ov-bar-dot" style="background:' + s.color + ';"></span>' +
+                '<span class="ov-bar-label">' + s.label + '</span>' +
+                '<span class="ov-bar-count">' + s.count + '<span class="ov-bar-pct"> · ' + pctLabel + '%</span></span>' +
+            '</div>' +
+            '<div class="ov-bar-track"><div class="ov-bar-fill" style="width:0;background:' + s.color + ';" data-w="' + pctNum.toFixed(1) + '"></div></div>' +
+        '</div>';
+    }).join('');
+    // Animate widths in after paint so the bars grow from zero.
+    requestAnimationFrame(function() {
+        el.querySelectorAll('.ov-bar-fill').forEach(function(f) { f.style.width = f.dataset.w + '%'; });
+    });
 }
 
 var CAT_META = [
@@ -291,23 +315,6 @@ var STATUS_META = [
     { key: 'on_hold',      label: 'On Hold',            color: '#f39c12' },
     { key: 'dropped',      label: 'Dropped',            color: '#e74c3c' }
 ];
-
-function updateBarChart(percentages, stats) {
-    [
-        { id: 'playingBar',   pct: 'playingPercent',   val: percentages.playing,      cnt: stats.playing },
-        { id: 'completedBar', pct: 'completedPercent', val: percentages.completed,    cnt: stats.completed },
-        { id: 'planBar',      pct: 'planPercent',      val: percentages.plan_to_play, cnt: stats.plan_to_play },
-        { id: 'onholdBar',    pct: 'onholdPercent',    val: percentages.on_hold,      cnt: stats.on_hold },
-        { id: 'droppedBar',   pct: 'droppedPercent',   val: percentages.dropped,      cnt: stats.dropped }
-    ].forEach(function(b) {
-        var barEl = document.getElementById(b.id);
-        var pctEl = document.getElementById(b.pct);
-        if (barEl && pctEl) {
-            setTimeout(function() { barEl.style.width = b.val + '%'; }, 100);
-            pctEl.textContent = b.val + '% (' + b.cnt + ')';
-        }
-    });
-}
 
 function drawPie(segments) {
     var svg = document.getElementById('pieChartSvg');
@@ -336,20 +343,6 @@ function drawPie(segments) {
     svg.innerHTML = paths;
 }
 
-function drawPieLegend(segments) {
-    var el = document.getElementById('pieLegend');
-    if (!el) return;
-    var total = segments.reduce(function(s, x) { return s + x.count; }, 0);
-    el.innerHTML = segments.map(function(s) {
-        var pctNum = total > 0 ? Math.round(s.count / total * 100) : 0;
-        return '<div class="legend-item">' +
-            '<span style="width:14px;height:14px;border-radius:4px;flex-shrink:0;background:' + s.color + ';"></span>' +
-            '<span style="flex:1;color:var(--text-secondary);">' + s.label + '</span>' +
-            '<span style="font-weight:700;color:var(--text-primary);">' + s.count + (total > 0 ? ' (' + pctNum + '%)' : '') + '</span>' +
-            '</div>';
-    }).join('');
-}
-
 function filterByMedia(games) {
     if (currentMediaFilter === 'all') return games;
     return games.filter(function(g) { return (g.media_type || 'game') === currentMediaFilter; });
@@ -369,7 +362,7 @@ function sortMyGames(games) {
     return sorted;
 }
 
-var STATUS_LABEL = { playing: 'In progress', completed: 'Completed', plan_to_play: 'Planned', on_hold: 'On Hold', dropped: 'Dropped' };
+var STATUS_LABEL = { playing: 'In progress', completed: 'Completed', plan_to_play: 'Planned', on_hold: 'On hold', dropped: 'Dropped' };
 var STATUS_COLOR = { playing: '#3498db', completed: '#2ecc71', plan_to_play: '#9b59b6', on_hold: '#f39c12', dropped: '#e74c3c' };
 
 function getRatingColor(score) {
@@ -532,6 +525,9 @@ async function showGameDetails(gameId) {
                 infoGridHtml +
                 (game.description ? '<p class="game-detail-desc">' + game.description + '</p>' : '') +
             '</div>';
+        var GCAT = { movie: 'movies', series: 'series', anime: 'anime', game: 'games' };
+        var gmEl = document.getElementById('gameModal');
+        if (gmEl) gmEl.setAttribute('data-cat', GCAT[game.media_type || 'game'] || 'games');
         if (typeof openModal === 'function') openModal('gameModal');
         else document.getElementById('gameModal').style.display = 'flex';
     } catch (error) {
@@ -556,6 +552,11 @@ function showUpdateModal(gameId) {
 
     // Episode progress only applies to series/anime that have a known episode count.
     var mediaType = game ? (game.media_type || 'game') : 'game';
+    // Theme the dialog to THIS item's category (green show, pink anime, …) rather
+    // than inheriting the neutral My Library page accent.
+    var CAT_OF = { movie: 'movies', series: 'series', anime: 'anime', game: 'games' };
+    var umEl = document.getElementById('updateModal');
+    if (umEl) umEl.setAttribute('data-cat', CAT_OF[mediaType] || 'games');
     var progRow = document.getElementById('updateProgressRow');
     var progInput = document.getElementById('updateProgress');
     var showProgress = game && (mediaType === 'series' || mediaType === 'anime') && game.episode_count;
@@ -570,24 +571,9 @@ function showUpdateModal(gameId) {
     }
     if (typeof openModal === 'function') openModal('updateModal');
     else document.getElementById('updateModal').style.display = 'flex';
-    setTimeout(function() {
-        var up  = document.getElementById('updateScoreUpBtn');
-        var dn  = document.getElementById('updateScoreDownBtn');
-        var inp = document.getElementById('updateScore');
-        var clr = document.getElementById('updateScoreClearBtn');
-        if (up && dn) {
-            up.onclick = function() { if (!inp.value) inp.value = 1; else if (parseInt(inp.value) < 10) inp.value = parseInt(inp.value) + 1; };
-            dn.onclick = function() { if (!inp.value) inp.value = 1; else if (parseInt(inp.value) > 1)  inp.value = parseInt(inp.value) - 1; };
-        }
-        if (clr) clr.onclick = function() { inp.value = ''; };
-        if (!_updateScoreBound && inp) {
-            _updateScoreBound = true;
-            inp.addEventListener('input', function() {
-                var v = inp.value.replace(/[^0-9]/g, '');
-                inp.value = v ? Math.min(10, Math.max(1, parseInt(v))) : '';
-            });
-        }
-    }, 0);
+    if (typeof bindScoreInput === 'function') {
+        bindScoreInput('updateScore', 'updateScoreUpBtn', 'updateScoreDownBtn', 'updateScoreClearBtn');
+    }
 }
 
 function closeUpdateModal() {
@@ -750,11 +736,20 @@ async function clLoadLists() {
 
 function clRenderAccordion() {
     var container = document.getElementById('clAccordion');
+    var visible = (currentMediaFilter === 'all')
+        ? clLists
+        : clLists.filter(function (l) { return l.category === currentMediaFilter; });
+
     if (clLists.length === 0) {
         container.innerHTML = '<div class="coll-empty-state"><div class="coll-empty-icon">No lists yet</div><p>Hit <strong>+ New List</strong> to create one.</p></div>';
         return;
     }
-    container.innerHTML = clLists.map(function(list) { return clRenderAccordionRow(list); }).join('');
+    if (visible.length === 0) {
+        var lbl = (typeof MEDIA_TAB_LABEL !== 'undefined' && MEDIA_TAB_LABEL[currentMediaFilter]) ? MEDIA_TAB_LABEL[currentMediaFilter] : currentMediaFilter;
+        container.innerHTML = '<div class="coll-empty-state"><div class="coll-empty-icon">No ' + esc(lbl) + ' lists</div><p>None of your lists are set to ' + esc(lbl) + '. Switch to All to see the rest.</p></div>';
+        return;
+    }
+    container.innerHTML = visible.map(function(list) { return clRenderAccordionRow(list); }).join('');
 
     container.querySelectorAll('.cl-acc-header').forEach(function(header) {
         header.addEventListener('click', function(e) {
@@ -785,9 +780,11 @@ function clRenderAccordion() {
     }
 }
 
+var CL_CAT_LABEL = { movie: 'Movies', series: 'Shows', anime: 'Anime', game: 'Games' };
 function clRenderAccordionRow(list) {
     var count      = list.game_count || 0;
     var isExpanded = clExpandedListId === list.id;
+    var catBadge   = list.category ? '<span class="cl-cat-badge" data-cat="' + list.category + '">' + CL_CAT_LABEL[list.category] + '</span>' : '';
     return '<div class="cl-acc-row ' + (isExpanded ? 'expanded' : '') + '" data-list-id="' + list.id + '">' +
         '<div class="cl-acc-header">' +
             '<div class="cl-acc-header-left">' +
@@ -795,7 +792,8 @@ function clRenderAccordionRow(list) {
                 '<div class="cl-acc-title-group">' +
                     '<div class="cl-acc-title-row">' +
                         '<span class="cl-acc-name">' + esc(list.name) + '</span>' +
-                        '<span class="pill">' + count + ' ' + (count === 1 ? 'game' : 'games') + '</span>' +
+                        catBadge +
+                        '<span class="pill">' + count + ' ' + (count === 1 ? 'title' : 'titles') + '</span>' +
                         '<span class="pill ' + (list.is_public ? 'pill-green' : 'pill-amber') + '">' + (list.is_public ? 'Public' : 'Private') + '</span>' +
                     '</div>' +
                     (list.description ? '<div class="cl-acc-desc">' + esc(list.description) + '</div>' : '') +
@@ -850,7 +848,7 @@ function clRenderListBody(listId) {
 
     var statusOptions = ['all', 'playing', 'completed', 'plan_to_play', 'on_hold', 'dropped'];
     var statusTabsHtml = statusOptions.map(function(s) {
-        return '<button class="status-tab ' + (f.status === s ? 'active' : '') + '" data-status="' + s + '">' + (s === 'all' ? 'All Games' : STATUS_LABEL[s]) + '</button>';
+        return '<button class="status-tab ' + (f.status === s ? 'active' : '') + '" data-status="' + s + '">' + (s === 'all' ? 'All' : STATUS_LABEL[s]) + '</button>';
     }).join('');
 
     body.innerHTML =
@@ -996,6 +994,7 @@ function clOpenListForm(list) {
     document.getElementById('clListName').value             = list ? list.name : '';
     document.getElementById('clListDesc').value             = list ? (list.description || '') : '';
     document.getElementById('clListPublic').checked         = list ? !!list.is_public : true;
+    document.getElementById('clListCategory').value         = list ? (list.category || '') : '';
     clUpdateCharCount('clListName', 'clListNameCount', 100);
     clUpdateCharCount('clListDesc', 'clListDescCount', 500);
     clOpenModal('clListFormModal');
@@ -1006,11 +1005,12 @@ async function clSubmitListForm() {
     var name      = document.getElementById('clListName').value.trim();
     var desc      = document.getElementById('clListDesc').value.trim();
     var is_public = document.getElementById('clListPublic').checked;
+    var category  = document.getElementById('clListCategory').value || null;
     if (!name) { clShowToast('Please enter a list name', 'error'); return; }
     var btn = document.getElementById('clListFormSubmit');
     btn.disabled = true; btn.textContent = 'Saving...';
     try {
-        var body = { name: name, description: desc || null, cover_color: '#3a7bd5', is_public: is_public };
+        var body = { name: name, description: desc || null, cover_color: '#3a7bd5', is_public: is_public, category: category };
         if (clEditingId) { await clApi('PUT',  '/user/lists/' + clEditingId, body); clShowToast('List updated!', 'success'); }
         else             { await clApi('POST', '/user/lists',               body); clShowToast('List created!', 'success'); }
         clCloseModal('clListFormModal');

@@ -7,10 +7,13 @@
     <meta name="description" content="Track, rate, and share the movies, shows, anime, and games you love with MediaListory.">
     <meta name="robots" content="noindex,follow">
     <script>try{if(localStorage.getItem('theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap">
     <link rel="stylesheet" href="styles.css">
     <style>
         /* Category tabs, pills, and accents come from styles.css (unified). */
-        .coll-item-progress { font-size: 0.72rem; color: #94a3b8; margin-left: 8px; }
+        .coll-item-progress { font-size: 0.72rem; color: var(--text-muted); margin-left: 8px; }
     </style>
     <!-- seo:start -->
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -24,13 +27,8 @@
         <nav class="navbar" id="appNav" data-active="list" data-brand="MediaListory" data-page-title="My Library" data-page-sub="Everything you are tracking, organized by category."></nav>
         <h1 class="sr-only">My library</h1>
 
-        <div class="library-quicklinks">
-            <a href="stats.html" class="btn btn-secondary">Your Stats</a>
-            <a href="calendar.html" class="btn btn-secondary">Release Calendar</a>
-        </div>
-
         <div class="page-tabs" role="tablist" aria-label="My list sections">
-            <button type="button" class="page-tab active" role="tab" id="tabBtnCollection" data-tab="collection" aria-controls="tab-collection" aria-selected="true">My Collection</button>
+            <button type="button" class="page-tab active" role="tab" id="tabBtnCollection" data-tab="collection" aria-controls="tab-collection" aria-selected="true">Collection</button>
             <button type="button" class="page-tab" role="tab" id="tabBtnLists" data-tab="lists" aria-controls="tab-lists" aria-selected="false" tabindex="-1">Custom Lists</button>
         </div>
 
@@ -44,81 +42,25 @@
 
         <div class="tab-panel active" id="tab-collection" role="tabpanel" aria-labelledby="tabBtnCollection">
 
-            <div class="stats-dashboard">
-                <h2 class="stats-title">Library Statistics</h2>
-                <div class="combined-chart">
-
-                    <div class="bar-chart-section">
-                        <div class="progress-bar-item">
-                            <div class="bar-label">
-                                <span class="status-dot playing"></span>
-                                <span>In progress</span>
-                            </div>
-                            <div class="bar-container">
-                                <div class="bar-fill playing" id="playingBar" style="width:0%"></div>
-                                <span class="bar-percentage" id="playingPercent">0%</span>
-                            </div>
-                        </div>
-                        <div class="progress-bar-item">
-                            <div class="bar-label">
-                                <span class="status-dot completed"></span>
-                                <span>Completed</span>
-                            </div>
-                            <div class="bar-container">
-                                <div class="bar-fill completed" id="completedBar" style="width:0%"></div>
-                                <span class="bar-percentage" id="completedPercent">0%</span>
-                            </div>
-                        </div>
-                        <div class="progress-bar-item">
-                            <div class="bar-label">
-                                <span class="status-dot plan"></span>
-                                <span>Planned</span>
-                            </div>
-                            <div class="bar-container">
-                                <div class="bar-fill plan" id="planBar" style="width:0%"></div>
-                                <span class="bar-percentage" id="planPercent">0%</span>
-                            </div>
-                        </div>
-                        <div class="progress-bar-item">
-                            <div class="bar-label">
-                                <span class="status-dot onhold"></span>
-                                <span>On Hold</span>
-                            </div>
-                            <div class="bar-container">
-                                <div class="bar-fill onhold" id="onholdBar" style="width:0%"></div>
-                                <span class="bar-percentage" id="onholdPercent">0%</span>
-                            </div>
-                        </div>
-                        <div class="progress-bar-item">
-                            <div class="bar-label">
-                                <span class="status-dot dropped"></span>
-                                <span>Dropped</span>
-                            </div>
-                            <div class="bar-container">
-                                <div class="bar-fill dropped" id="droppedBar" style="width:0%"></div>
-                                <span class="bar-percentage" id="droppedPercent">0%</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="pie-chart-section">
+            <div class="stats-dashboard" id="collectionOverview">
+                <h2 class="stats-title" id="overviewTitle">By category</h2>
+                <div class="overview-split">
+                    <div class="overview-bars" id="overviewBars"></div>
+                    <div class="overview-pie-col">
                         <div class="pie-chart-container">
-                            <svg class="pie-chart" viewBox="0 0 200 200" id="pieChartSvg">
-                                <circle cx="100" cy="100" r="90" fill="#1e2a38" />
-                            </svg>
+                            <svg class="pie-chart" viewBox="0 0 200 200" id="pieChartSvg"><circle cx="100" cy="100" r="90" fill="var(--bg-deep)" /></svg>
                         </div>
-                        <div class="pie-legend" id="pieLegend"></div>
+                        <div class="overview-total" id="overviewTotal"></div>
                     </div>
-
                 </div>
             </div>
 
             <div class="my-games-section">
                 <div class="list-header">
-                    <h2>My Library</h2>
+                    <h2>Collection</h2>
                     <div class="list-header-actions">
-                        <label class="sr-only" for="myGamesSearch">Search my games</label>
-                        <input type="text" id="myGamesSearch" class="search-input" placeholder="Search your library..." aria-label="Search your library">
+                        <label class="sr-only" for="myGamesSearch">Search your collection</label>
+                        <input type="text" id="myGamesSearch" class="search-input" placeholder="Search your collection..." aria-label="Search your collection">
                         <select id="myGamesSort" class="filter-select">
                             <option value="recently_added">Recently Added</option>
                             <option value="name">Name (A-Z)</option>
@@ -139,7 +81,7 @@
                     <button class="status-tab" data-status="playing">In progress</button>
                     <button class="status-tab" data-status="completed">Completed</button>
                     <button class="status-tab" data-status="plan_to_play">Planned</button>
-                    <button class="status-tab" data-status="on_hold">On Hold</button>
+                    <button class="status-tab" data-status="on_hold">On hold</button>
                     <button class="status-tab" data-status="dropped">Dropped</button>
                 </div>
 
@@ -164,10 +106,10 @@
                         </div>
                         <label for="updateStatus">Status:</label>
                         <select id="updateStatus" class="filter-select update-status-select">
-                            <option value="playing">Playing</option>
+                            <option value="playing">In progress</option>
                             <option value="completed">Completed</option>
-                            <option value="plan_to_play">Plan to Play</option>
-                            <option value="on_hold">On Hold</option>
+                            <option value="plan_to_play">Planned</option>
+                            <option value="on_hold">On hold</option>
                             <option value="dropped">Dropped</option>
                         </select>
                         <label for="updateScore">Score (1-10, optional):</label>
@@ -245,6 +187,16 @@
                 <div class="cl-char-count" id="clListDescCount">0 / 500</div>
             </div>
             <div class="cl-form-group">
+                <label class="cl-form-label" for="clListCategory">Category</label>
+                <select class="cl-form-input" id="clListCategory">
+                    <option value="">Mixed (any)</option>
+                    <option value="movie">Movies</option>
+                    <option value="series">Shows</option>
+                    <option value="anime">Anime</option>
+                    <option value="game">Games</option>
+                </select>
+            </div>
+            <div class="cl-form-group">
                 <div class="cl-toggle-row">
                     <div>
                         <div class="cl-toggle-label">Public list</div>
@@ -283,10 +235,10 @@
             <div class="update-form">
                 <label for="clEditStatusSelect">Status:</label>
                 <select id="clEditStatusSelect" class="filter-select update-status-select">
-                    <option value="playing">Playing</option>
+                    <option value="playing">In progress</option>
                     <option value="completed">Completed</option>
-                    <option value="plan_to_play">Plan to Play</option>
-                    <option value="on_hold">On Hold</option>
+                    <option value="plan_to_play">Planned</option>
+                    <option value="on_hold">On hold</option>
                     <option value="dropped">Dropped</option>
                 </select>
                 <label for="clEditScoreInput">Score (1-10, optional):</label>

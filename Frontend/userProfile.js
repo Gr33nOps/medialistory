@@ -3,11 +3,13 @@ const API_BASE = (typeof window !== 'undefined' && window.API_BASE) ? window.API
 let authToken     = localStorage.getItem('authToken');
 let currentUser   = (typeof getStoredUser === 'function') ? getStoredUser() : null;
 let viewingUserId = null;
-let followStatus  = { isFollowing: false, followsYou: false };
+let followStatus  = { isFollowing: false, followsYou: false, requested: false, isPrivate: false };
+let viewedUser    = null;
 
 let userGamesCache      = [];
 let currentSort         = 'recently_added';
 let currentStatusFilter = 'all';
+let currentMediaFilter  = 'all';
 let currentSearchTerm   = '';
 
 let upLists          = [];
@@ -16,10 +18,10 @@ let upExpandedListId = null;
 let upFilters        = {};
 
 var STATUS_LABEL = {
-    playing:      'Playing',
+    playing:      'In progress',
     completed:    'Completed',
-    plan_to_play: 'Plan to Play',
-    on_hold:      'On Hold',
+    plan_to_play: 'Planned',
+    on_hold:      'On hold',
     dropped:      'Dropped'
 };
 
@@ -126,6 +128,17 @@ function initPage() {
         });
     });
 
+    // Category filter (Movies / Shows / Anime / Games / All)
+    document.querySelectorAll('#upMediaTabs .media-tab').forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('#upMediaTabs .media-tab').forEach(function(t) { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
+            tab.classList.add('active'); tab.setAttribute('aria-selected', 'true');
+            currentMediaFilter = tab.dataset.media;
+            displayUserGames(sortGames(userGamesCache));
+            if (upLists.length) upRenderAccordion();
+        });
+    });
+
     if (typeof bindModal === 'function') bindModal('gameModal', 'closeModalBtn');
     else document.getElementById('closeModalBtn').addEventListener('click', function() {
         document.getElementById('gameModal').style.display = 'none';
@@ -155,7 +168,6 @@ function initPage() {
     document.getElementById('shareProfileBtn').addEventListener('click', copyShareLink);
 
     loadUserProfile();
-    loadUserGames();
 }
 
 async function loadUserProfile() {
@@ -178,46 +190,62 @@ async function loadUserProfile() {
 }
 
 function displayUserProfile(user) {
+    viewedUser = user;
+    var name = user.display_name || user.username;
     var avatarUrl = user.avatar_url ||
-        'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.display_name || user.username) + '&size=200&background=3b82f6&color=fff&bold=true';
+        'https://ui-avatars.com/api/?name=' + encodeURIComponent(name) + '&size=200&background=475569&color=fff&bold=true';
 
-    document.getElementById('profileTitle').textContent     = (user.display_name || user.username) + "'s Profile";
-    document.getElementById('gameListTitle').textContent    = (user.display_name || user.username) + "'s Library";
-    if (user.mediaBreakdown) {
-        var bd = user.mediaBreakdown;
-        var titleEl = document.getElementById('gameListTitle');
-        var existing = document.getElementById('mediaBreakdownLine');
-        if (existing) existing.remove();
-        var line = document.createElement('div');
-        line.id = 'mediaBreakdownLine';
-        line.className = 'cat-breakdown';
-        var order = [['movie', 'Movies'], ['series', 'Shows'], ['anime', 'Anime'], ['game', 'Games']];
-        line.innerHTML = order.map(function(o) {
-            return '<span class="cat-stat" data-cat="' + o[0] + '">' +
-                '<span class="cs-num">' + (bd[o[0]] || 0) + '</span>' +
-                '<span class="cs-label">' + o[1] + '</span></span>';
-        }).join('');
-        if (titleEl && titleEl.parentNode) titleEl.parentNode.insertBefore(line, titleEl.nextSibling);
-    }
-    document.getElementById('customListsTitle').textContent = (user.display_name || user.username) + "'s Lists";
+    document.getElementById('profileTitle').textContent     = name + "'s profile";
+    document.getElementById('gameListTitle').textContent    = name + "'s collection";
+    document.getElementById('customListsTitle').textContent = name + "'s lists";
     document.getElementById('userAvatar').src               = avatarUrl;
-    document.getElementById('displayName').textContent      = user.display_name || '-';
+    document.getElementById('displayName').textContent      = name;
     document.getElementById('displayUsername').textContent  = user.username;
     document.getElementById('displayCreatedAt').textContent = formatDate(user.created_at);
-    document.getElementById('totalGames').textContent       = user.totalGames     || 0;
     document.getElementById('userLevel').textContent        = calculateLevel(user.totalGames || 0);
     document.getElementById('followersCount').textContent   = user.followersCount || 0;
     document.getElementById('followingCount').textContent   = user.followingCount || 0;
+
+    // Category breakdown near the stats (matches your own profile).
+    var bdEl = document.getElementById('upMediaBreakdown');
+    if (bdEl) {
+        if (user.canView) {
+            var bd = user.mediaBreakdown || { movie: 0, series: 0, anime: 0, game: 0 };
+            var order = [['movie', 'Movies'], ['series', 'Shows'], ['anime', 'Anime'], ['game', 'Games']];
+            bdEl.hidden = false;
+            bdEl.innerHTML = order.map(function (o) {
+                return '<span class="cat-stat" data-cat="' + o[0] + '"><span class="cs-num">' + (bd[o[0]] || 0) + '</span><span class="cs-label">' + o[1] + '</span></span>';
+            }).join('');
+        } else { bdEl.hidden = true; bdEl.innerHTML = ''; }
+    }
+
+    // Privacy gate: hide the library/lists for a private account you don't follow.
+    var notice = document.getElementById('privateNotice');
+    var tabs   = document.getElementById('upTabs');
+    var panels = document.querySelectorAll('.tab-panel');
+    if (!user.canView) {
+        if (notice) { notice.hidden = false; var pt = document.getElementById('privateNoticeText'); if (pt) pt.textContent = 'Follow ' + name + ' to see their library and lists. They’ll get a request to approve.'; }
+        if (tabs) tabs.hidden = true;
+        panels.forEach(function (p) { p.style.display = 'none'; });
+    } else {
+        if (notice) notice.hidden = true;
+        if (tabs) tabs.hidden = false;
+        panels.forEach(function (p) { p.style.display = ''; });
+        if (!userGamesLoaded) { userGamesLoaded = true; loadUserGames(); }
+    }
 }
+var userGamesLoaded = false;
 
 async function loadUserGames() {
+    if (typeof showSkeleton === 'function') showSkeleton('userGamesList', 'rows', 6);
     try {
         var r = await fetch(`${API_BASE}/users/${viewingUserId}/games`, {
             headers: { 'Authorization': `Bearer ${authToken}` }
         });
         if (r.ok) {
             var d = await r.json();
-            userGamesCache = d.games;
+            userGamesCache = d.games || [];
+            updateUpMediaCounts();
             displayUserGames(sortGames(userGamesCache));
         } else {
             console.error('Failed to load games');
@@ -243,29 +271,39 @@ function sortGames(games) {
     return s;
 }
 
+function updateUpMediaCounts() {
+    var counts = { all: userGamesCache.length, movie: 0, series: 0, anime: 0, game: 0 };
+    userGamesCache.forEach(function (g) { var t = g.media_type || 'game'; if (counts[t] != null) counts[t]++; });
+    document.querySelectorAll('#upMediaTabs .media-tab').forEach(function (tab) {
+        var k = tab.dataset.media;
+        if (tab.querySelector('.mt-count')) tab.querySelector('.mt-count').textContent = counts[k] || 0;
+        else tab.insertAdjacentHTML('beforeend', ' <span class="mt-count">' + (counts[k] || 0) + '</span>');
+    });
+}
+
 function displayUserGames(games) {
     var container = document.getElementById('userGamesList');
     var filtered  = games;
 
+    if (currentMediaFilter !== 'all') {
+        filtered = filtered.filter(function(g) { return (g.media_type || 'game') === currentMediaFilter; });
+    }
     if (currentStatusFilter !== 'all') {
         filtered = filtered.filter(function(g) { return g.status === currentStatusFilter; });
     }
     if (currentSearchTerm) {
-        filtered = filtered.filter(function(g) { return g.name.toLowerCase().includes(currentSearchTerm); });
+        filtered = filtered.filter(function(g) { return (g.name || '').toLowerCase().includes(currentSearchTerm); });
     }
 
     if (filtered.length === 0) {
         var escFn = typeof esc === 'function' ? esc : function (s) { return String(s || ''); };
         var term = escFn(currentSearchTerm);
         var statusLbl = escFn(STATUS_LABEL[currentStatusFilter] || currentStatusFilter);
-        var msg = 'This user has no games in their collection yet.';
-        if (currentSearchTerm && currentStatusFilter !== 'all')
-            msg = 'No games matching "' + term + '" with status "' + statusLbl + '".';
-        else if (currentSearchTerm)
-            msg = 'No games matching "' + term + '".';
-        else if (currentStatusFilter !== 'all')
-            msg = 'No games with status "' + statusLbl + '".';
-        container.innerHTML = '<div class="coll-empty-state"><div class="coll-empty-icon">No games found</div><p>' + msg + '</p></div>';
+        var msg = 'Nothing here yet.';
+        if (currentSearchTerm) msg = 'No titles matching "' + term + '".';
+        else if (currentStatusFilter !== 'all') msg = 'No titles marked "' + statusLbl + '".';
+        else if (currentMediaFilter !== 'all') msg = 'No ' + (typeof mediaTypeLabel === 'function' ? mediaTypeLabel(currentMediaFilter, true).toLowerCase() : currentMediaFilter) + ' tracked.';
+        container.innerHTML = '<div class="coll-empty-state"><div class="coll-empty-icon">No titles found</div><p>' + msg + '</p></div>';
         return;
     }
 
@@ -457,11 +495,19 @@ async function upLoadLists() {
 
 function upRenderAccordion() {
     var container = document.getElementById('upAccordion');
+    var visible = (currentMediaFilter === 'all')
+        ? upLists
+        : upLists.filter(function (l) { return l.category === currentMediaFilter; });
     if (upLists.length === 0) {
         container.innerHTML = '<div class="coll-empty-state"><div class="coll-empty-icon">No lists</div><p>This user has no public lists yet.</p></div>';
         return;
     }
-    container.innerHTML = upLists.map(function(list) { return upRenderAccordionRow(list); }).join('');
+    if (visible.length === 0) {
+        var lbl = UP_CAT_LABEL[currentMediaFilter] || currentMediaFilter;
+        container.innerHTML = '<div class="coll-empty-state"><div class="coll-empty-icon">No ' + esc(lbl) + ' lists</div><p>Switch to All to see their other lists.</p></div>';
+        return;
+    }
+    container.innerHTML = visible.map(function(list) { return upRenderAccordionRow(list); }).join('');
 
     container.querySelectorAll('.up-acc-header').forEach(function(header) {
         header.addEventListener('click', function() {
@@ -476,9 +522,11 @@ function upRenderAccordion() {
     }
 }
 
+var UP_CAT_LABEL = { movie: 'Movies', series: 'Shows', anime: 'Anime', game: 'Games' };
 function upRenderAccordionRow(list) {
     var count      = list.game_count || 0;
     var isExpanded = upExpandedListId === list.id;
+    var catBadge   = list.category ? '<span class="cl-cat-badge" data-cat="' + list.category + '">' + UP_CAT_LABEL[list.category] + '</span>' : '';
     return '<div class="cl-acc-row ' + (isExpanded ? 'expanded' : '') + '" data-list-id="' + list.id + '">' +
         '<div class="up-acc-header cl-acc-header">' +
             '<div class="cl-acc-header-left">' +
@@ -486,7 +534,8 @@ function upRenderAccordionRow(list) {
                 '<div class="cl-acc-title-group">' +
                     '<div class="cl-acc-title-row">' +
                         '<span class="cl-acc-name">' + esc(list.name) + '</span>' +
-                        '<span class="pill">' + count + ' ' + (count === 1 ? 'game' : 'games') + '</span>' +
+                        catBadge +
+                        '<span class="pill">' + count + ' ' + (count === 1 ? 'title' : 'titles') + '</span>' +
                     '</div>' +
                     (list.description ? '<div class="cl-acc-desc">' + esc(list.description) + '</div>' : '') +
                 '</div>' +
@@ -550,7 +599,7 @@ function upRenderListBody(listId) {
 
     var statusOptions = ['all', 'playing', 'completed', 'plan_to_play', 'on_hold', 'dropped'];
     var statusTabsHtml = statusOptions.map(function(s) {
-        return '<button class="status-tab ' + (f.status === s ? 'active' : '') + '" data-status="' + s + '">' + (s === 'all' ? 'All Games' : STATUS_LABEL[s]) + '</button>';
+        return '<button class="status-tab ' + (f.status === s ? 'active' : '') + '" data-status="' + s + '">' + (s === 'all' ? 'All' : STATUS_LABEL[s]) + '</button>';
     }).join('');
 
     body.innerHTML =
@@ -735,14 +784,16 @@ async function checkFollowStatus() {
 
 function updateFollowButton() {
     var btn = document.getElementById('followActionBtn');
+    if (!btn) return;
+    if (viewedUser && viewedUser.isSelf) { btn.style.display = 'none'; return; }
+    btn.style.display = '';
     if (followStatus.isFollowing) {
-        btn.textContent = 'Following';
-        btn.className   = 'btn btn-secondary btn-sm';
-        btn.onclick     = unfollowUser;
+        btn.textContent = 'Following'; btn.className = 'btn btn-secondary btn-sm'; btn.onclick = unfollowUser;
+    } else if (followStatus.requested) {
+        btn.textContent = 'Requested'; btn.className = 'btn btn-secondary btn-sm'; btn.onclick = unfollowUser;
     } else {
-        btn.textContent = 'Follow';
-        btn.className   = 'btn btn-success btn-sm';
-        btn.onclick     = followUser;
+        btn.textContent = followStatus.isPrivate ? 'Request to follow' : 'Follow';
+        btn.className = 'btn btn-primary btn-sm'; btn.onclick = followUser;
     }
 }
 
@@ -752,8 +803,12 @@ async function followUser() {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${authToken}` }
         });
-        if (r.ok) { await checkFollowStatus(); await loadUserProfile(); }
-        else { var d = await r.json(); notify('Failed to follow: ' + (d.error || 'Unknown error')); }
+        var d = await r.json().catch(function () { return {}; });
+        if (r.ok) {
+            if (d.status === 'requested' && typeof toast === 'function') toast('Follow request sent.', 'success');
+            userGamesLoaded = false;
+            await loadUserProfile();
+        } else { notify('Failed to follow: ' + (d.error || 'Unknown error')); }
     } catch (e) { notify('Error following user. Please try again.'); }
 }
 
@@ -772,7 +827,7 @@ async function unfollowUser() {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${authToken}` }
         });
-        if (r.ok) { await checkFollowStatus(); await loadUserProfile(); }
+        if (r.ok) { userGamesLoaded = false; await loadUserProfile(); }
         else { var d = await r.json(); notify('Failed to unfollow: ' + (d.error || 'Unknown error')); }
     } catch (e) { notify('Error unfollowing user. Please try again.'); }
 }

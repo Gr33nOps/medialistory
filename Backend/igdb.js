@@ -15,7 +15,9 @@ const GAME_FIELDS =
   'involved_companies.publisher, involved_companies.developer';
 
 const DETAIL_FIELDS =
-  GAME_FIELDS + ', screenshots.url';
+  GAME_FIELDS + ', storyline, screenshots.url, videos.video_id, videos.name, ' +
+  'game_modes.name, player_perspectives.name, ' +
+  'similar_games.name, similar_games.cover.url, similar_games.total_rating';
 
 const ALLOWED_SORT = {
   release: 'first_release_date',
@@ -189,7 +191,9 @@ module.exports = (verifyToken, checkBanned, db) => {
     const sortField = ALLOWED_SORT[sortKey];
     const sortOrder = body.sortOrder === 'asc' ? 'asc' : 'desc';
     const comingSoon = !!body.comingSoon;
+    const trending = !!body.trending && !comingSoon;
     const now = Math.floor(Date.now() / 1000);
+    const TRENDING_WINDOW = 60 * 60 * 24 * 540; // ~18 months of recent releases
 
     // Main games + remakes/remasters/etc. Exclude DLC/mods/episodes via game_type.
     // version_parent / parent_game null drops editions that are child versions.
@@ -203,6 +207,10 @@ module.exports = (verifyToken, checkBanned, db) => {
 
     if (comingSoon || sortKey === 'coming') {
       where.push(`first_release_date > ${now}`);
+    } else if (trending && !search) {
+      // "Trending": recently-released titles that already have real traction.
+      where.push(`first_release_date != null & first_release_date >= ${now - TRENDING_WINDOW} & first_release_date <= ${now}`);
+      where.push('total_rating_count != null & total_rating_count >= 3');
     } else {
       where.push(`first_release_date != null & first_release_date <= ${now}`);
       if (sortKey === 'popularity' && !search) {
@@ -229,7 +237,7 @@ module.exports = (verifyToken, checkBanned, db) => {
     if (comingSoon || sortKey === 'coming') {
       finalSortField = 'first_release_date';
       finalSortOrder = 'asc';
-    } else if (sortKey === 'popularity') {
+    } else if (trending || sortKey === 'popularity') {
       finalSortField = 'total_rating_count';
       finalSortOrder = 'desc';
     }
@@ -354,21 +362,24 @@ module.exports = (verifyToken, checkBanned, db) => {
         return res.json(cached);
       }
 
-      if (detailId) {
-        const fromDb = await loadDetailFromDb(detailId);
-        if (fromDb) {
-          cache.set(cacheKey, fromDb, TTL.detail);
-          res.setHeader('X-Cache', 'DB');
-          return res.json(fromDb);
-        }
-      }
-
+      // Detail views must come from IGDB so they carry the rich fields (videos,
+      // screenshots, similar games, modes). The stored DB row only has the
+      // browse-level columns, so it is a fallback for when IGDB is unavailable,
+      // not the primary source.
       const query = buildGamesQuery(body);
       const response = await igdbFetch('/games', query);
       const data = await response.json();
 
       if (!response.ok) {
-        if (!detailId) {
+        if (detailId) {
+          const fromDb = await loadDetailFromDb(detailId);
+          if (fromDb) {
+            cache.set(cacheKey, fromDb, TTL.detail);
+            res.setHeader('X-Cache', 'DB');
+            res.setHeader('X-Degraded', 'igdb');
+            return res.json(fromDb);
+          }
+        } else {
           const degraded = await serveDegradedList(res, body, cacheKey);
           if (degraded) return;
         }
@@ -382,7 +393,15 @@ module.exports = (verifyToken, checkBanned, db) => {
       res.setHeader('X-Cache', 'MISS');
       res.json(data);
     } catch (error) {
-      if (!(req.body && clampInt(req.body.id, 1, Number.MAX_SAFE_INTEGER, 0))) {
+      const detailId = clampInt(req.body && req.body.id, 1, Number.MAX_SAFE_INTEGER, 0);
+      if (detailId) {
+        const fromDb = await loadDetailFromDb(detailId);
+        if (fromDb) {
+          res.setHeader('X-Cache', 'DB');
+          res.setHeader('X-Degraded', 'igdb');
+          return res.json(fromDb);
+        }
+      } else {
         const body = req.body || {};
         const cacheKey = `list:${crypto.createHash('sha1').update(JSON.stringify(body)).digest('hex')}`;
         const degraded = await serveDegradedList(res, body, cacheKey);

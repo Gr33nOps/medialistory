@@ -573,15 +573,10 @@
     return msg;
   }
 
-  // Same internal status keys across all media; labels differ per category so the
-  // UI reads naturally (games "play", movies/series "watch").
+  // One consistent status vocabulary across every media type (no "watch" vs
+  // "play" split), so the same status reads the same everywhere.
   var STATUS_KEYS = ['playing', 'completed', 'plan_to_play', 'on_hold', 'dropped'];
-  var STATUS_LABELS = {
-    game:   { playing: 'Playing', completed: 'Completed', plan_to_play: 'Plan to Play', on_hold: 'On Hold', dropped: 'Dropped' },
-    movie:  { playing: 'Watching', completed: 'Watched', plan_to_play: 'Plan to Watch', on_hold: 'On Hold', dropped: 'Dropped' },
-    series: { playing: 'Watching', completed: 'Completed', plan_to_play: 'Plan to Watch', on_hold: 'On Hold', dropped: 'Dropped' },
-    anime:  { playing: 'Watching', completed: 'Completed', plan_to_play: 'Plan to Watch', on_hold: 'On Hold', dropped: 'Dropped' }
-  };
+  var STATUS_LABEL_MAP = { playing: 'In progress', completed: 'Completed', plan_to_play: 'Planned', on_hold: 'On hold', dropped: 'Dropped' };
 
   function mediaTypeLabel(mediaType, plural) {
     var map = { game: 'Game', movie: 'Movie', series: 'Show', anime: 'Anime' };
@@ -591,17 +586,40 @@
     return base + 's';
   }
 
-  function statusLabel(status, mediaType) {
-    var set = STATUS_LABELS[mediaType] || STATUS_LABELS.game;
-    return set[status] || status || '';
+  function statusLabel(status) {
+    return STATUS_LABEL_MAP[status] || status || '';
   }
 
   function statusOptions(mediaType, selected) {
-    var set = STATUS_LABELS[mediaType] || STATUS_LABELS.game;
     return STATUS_KEYS.map(function (key) {
       var sel = key === selected ? ' selected' : '';
-      return '<option value="' + key + '"' + sel + '>' + set[key] + '</option>';
+      return '<option value="' + key + '"' + sel + '>' + STATUS_LABEL_MAP[key] + '</option>';
     }).join('');
+  }
+
+  // Wire a score field: +/- steppers, a "clear" (No Score), and — importantly —
+  // reject letters so only 1–10 or empty can be entered (type=number still lets
+  // e/+/-/. through, hence the guards). Pass element ids (or the input node).
+  function bindScoreInput(input, upId, downId, clearId) {
+    input = (typeof input === 'string') ? document.getElementById(input) : input;
+    if (!input) return;
+    var up = upId && document.getElementById(upId);
+    var down = downId && document.getElementById(downId);
+    var clear = clearId && document.getElementById(clearId);
+    function cur() { var n = parseInt(input.value, 10); return Number.isNaN(n) ? null : n; }
+    function set(v) { input.value = (v == null) ? '' : String(Math.min(10, Math.max(1, v))); }
+    if (up) up.onclick = function () { var n = cur(); set(n == null ? 1 : n + 1); };
+    if (down) down.onclick = function () { var n = cur(); set(n == null ? 1 : n - 1); };
+    if (clear) clear.onclick = function () { input.value = ''; };
+    if (input.dataset.scoreBound) return; // don't stack listeners on a reused input
+    input.dataset.scoreBound = '1';
+    input.addEventListener('keydown', function (e) {
+      if (['e', 'E', '+', '-', '.', ','].indexOf(e.key) !== -1) e.preventDefault();
+    });
+    input.addEventListener('input', function () {
+      var v = String(input.value).replace(/[^0-9]/g, '');
+      input.value = v ? String(Math.min(10, Math.max(1, parseInt(v, 10)))) : '';
+    });
   }
 
   function mountAppNav() {
@@ -632,37 +650,37 @@
       tab('anime.html',  'anime',  'Anime',  'anime') +
       tab('home.html',   'games',  'Games',  'games');
 
+    var PEOPLE_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
+    // People (Find & follow) lives as its own nav icon between Search and Theme.
+    var peopleBtn = isGuest ? '' :
+      '<a href="friends.html" class="nav-icon-btn' + (active === 'friends' ? ' active' : '') + '" id="navPeopleBtn" aria-label="Find and follow people" title="People">' + PEOPLE_SVG + '</a>';
+
     var utils =
       '<button type="button" class="nav-icon-btn" id="navSearchBtn" aria-label="Search all media" title="Search (press /)">' + SEARCH_SVG + '</button>' +
+      peopleBtn +
       '<button type="button" class="nav-icon-btn" id="navThemeBtn" aria-label="Toggle light or dark theme"></button>';
 
     var userArea;
     if (isGuest) {
       userArea = '<a href="auth.html" class="nav-cta' + (active === 'auth' ? ' active' : '') + '">Sign in</a>';
     } else {
-      // Account actions live behind the Profile menu, so Logout stops competing
-      // for attention in the bar and the nav / user areas read as separate groups.
-      var inMenu = (active === 'profile' || active === 'moderator' || active === 'admin');
+      var inMenu = (active === 'list' || active === 'profile' || active === 'moderator' || active === 'admin');
       var nameStr = (user && (user.display_name || user.username)) || 'You';
       var initials = nameStr.trim().slice(0, 2).toUpperCase() || 'U';
+      var avaInner = (user && user.avatar_url)
+        ? '<img src="' + esc(user.avatar_url) + '" alt="" onerror="this.remove()">'
+        : esc(initials);
 
       var menuItems =
+        '<div class="nav-menu-name" aria-hidden="true">' + esc(nameStr) + '</div>' +
+        '<a role="menuitem" href="myGameList.html" class="nav-menu-item' + (active === 'list' ? ' active' : '') + '">My Library</a>' +
         '<a role="menuitem" href="profile.html" class="nav-menu-item' + (active === 'profile' ? ' active' : '') + '">My profile</a>';
-      if (user && (user.is_moderator || user.is_admin)) {
-        menuItems += '<a role="menuitem" href="moderator.html" class="nav-menu-item' + (active === 'moderator' ? ' active' : '') + '">Moderate</a>';
-      }
-      if (user && user.is_admin) {
-        menuItems += '<a role="menuitem" href="admin.html" class="nav-menu-item' + (active === 'admin' ? ' active' : '') + '">Admin</a>';
-      }
       menuItems += '<button type="button" role="menuitem" class="nav-menu-item nav-menu-danger" id="navLogoutBtn">Log out</button>';
 
       userArea =
-        ulink('myGameList.html', 'list', 'My Library') +
-        ulink('friends.html', 'friends', 'Following') +
         '<div class="nav-menu">' +
-          '<button type="button" class="nav-menu-trigger' + (inMenu ? ' active' : '') + '" id="navProfileBtn" aria-haspopup="menu" aria-expanded="false">' +
-            '<span class="nav-ava" aria-hidden="true">' + esc(initials) + '</span>' +
-            '<span class="nav-menu-label">Profile</span>' +
+          '<button type="button" class="nav-menu-trigger nav-menu-trigger-ava' + (inMenu ? ' active' : '') + '" id="navProfileBtn" aria-haspopup="menu" aria-expanded="false" aria-label="Account menu">' +
+            '<span class="nav-ava" aria-hidden="true">' + avaInner + '</span>' +
             '<svg class="nav-caret" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>' +
           '</button>' +
           '<div class="nav-menu-pop" id="navProfileMenu" role="menu">' + menuItems + '</div>' +
@@ -671,10 +689,8 @@
 
     el.innerHTML =
       '<a class="nav-brand" href="dashboard.html">' + esc(brand) + '</a>' +
-      '<span class="nav-sep" aria-hidden="true"></span>' +
       '<nav class="nav-primary" aria-label="Categories">' + primary + '</nav>' +
-      '<div class="nav-utils">' + utils + '</div>' +
-      '<div class="nav-user">' + userArea + '</div>' +
+      '<div class="nav-right">' + utils + userArea + '</div>' +
       '<button type="button" class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="appNav" aria-label="Open menu">' +
         '<span class="nav-toggle-bar" aria-hidden="true"></span>' +
         '<span class="nav-toggle-bar" aria-hidden="true"></span>' +
@@ -862,21 +878,187 @@
     global.__openGlobalSearch = open;
   }
 
+  // ── Shared footer ───────────────────────────────────────────────────────
+  // One canonical footer for every app page (pages used to bake their own, and
+  // they had drifted — some credited only IGDB, the dashboard had none at all).
+  function mountAppFooter() {
+    if (!document.getElementById('appNav')) return; // main app pages only
+    // Drop any page-baked footer so exactly one, consistent footer shows.
+    document.querySelectorAll('.site-footer').forEach(function (f) { f.remove(); });
+    var host = document.getElementById('main-content') || document.body;
+    var f = document.createElement('footer');
+    f.className = 'site-footer';
+    f.innerHTML =
+      '<div class="footer-inner">' +
+        '<div class="footer-brand">' +
+          '<div class="brand-name">MediaListory</div>' +
+          '<p>Track the movies, shows, anime, and games you love, discover what to enjoy next, and share your library with friends.</p>' +
+        '</div>' +
+        '<div class="footer-col"><h4>Browse</h4><ul>' +
+          '<li><a href="movies.html">Movies</a></li>' +
+          '<li><a href="series.html">Shows</a></li>' +
+          '<li><a href="anime.html">Anime</a></li>' +
+          '<li><a href="home.html">Games</a></li>' +
+        '</ul></div>' +
+        '<div class="footer-col"><h4>Your space</h4><ul>' +
+          '<li><a href="myGameList.html">My Library</a></li>' +
+          '<li><a href="profile.html">Profile</a></li>' +
+        '</ul></div>' +
+        '<div class="footer-col"><h4>Data &amp; Credits</h4><ul>' +
+          '<li><a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer">TMDB</a></li>' +
+          '<li><a href="https://kitsu.io" target="_blank" rel="noopener noreferrer">Kitsu</a></li>' +
+          '<li><a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer">IGDB</a></li>' +
+        '</ul></div>' +
+      '</div>' +
+      '<div class="footer-igdb"><div class="footer-igdb-text">' +
+        'Movie &amp; show data from <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer">TMDB</a> ' +
+        '(this product uses the TMDB API but is not endorsed or certified by TMDB); anime from ' +
+        '<a href="https://kitsu.io" target="_blank" rel="noopener noreferrer">Kitsu</a>; games from ' +
+        '<a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer">IGDB</a>, a Twitch service. ' +
+        'All titles, images, and metadata are the property of their respective owners.' +
+      '</div></div>' +
+      '<div class="footer-bottom">' +
+        '<span>© 2026 MediaListory. All rights reserved.</span>' +
+        '<div class="footer-bottom-links">' +
+          '<a href="about.html">About</a>' +
+          '<a href="privacy.html">Privacy Policy</a>' +
+          '<a href="terms.html">Terms of Service</a>' +
+        '</div>' +
+      '</div>';
+    host.appendChild(f);
+  }
+
+  // Turn a horizontal overflow row into a clean scroller: hide the scrollbar,
+  // wrap it with edge fades + prev/next arrows. Idempotent; call after render.
+  function enhanceScrollers(root) {
+    var scope = root || document;
+    scope.querySelectorAll('.dash-scroller, .detail-cast, .detail-similar, .detail-shots').forEach(function (sc) {
+      if (sc.parentNode && sc.parentNode.classList.contains('scroller')) return;
+      var wrap = document.createElement('div');
+      wrap.className = 'scroller';
+      sc.parentNode.insertBefore(wrap, sc);
+      wrap.appendChild(sc);
+      var mk = function (dir) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'scroller-arrow scroller-arrow-' + dir;
+        b.setAttribute('aria-label', dir === 'left' ? 'Scroll left' : 'Scroll right');
+        b.innerHTML = dir === 'left' ? '‹' : '›';
+        b.addEventListener('click', function () {
+          sc.scrollBy({ left: (dir === 'left' ? -1 : 1) * sc.clientWidth * 0.8, behavior: 'smooth' });
+        });
+        return b;
+      };
+      wrap.appendChild(mk('left'));
+      wrap.appendChild(mk('right'));
+      var update = function () {
+        var max = sc.scrollWidth - sc.clientWidth;
+        wrap.classList.toggle('no-scroll', max <= 4);
+        wrap.classList.toggle('at-start', sc.scrollLeft <= 2);
+        wrap.classList.toggle('at-end', sc.scrollLeft >= max - 2);
+      };
+      sc.addEventListener('scroll', update, { passive: true });
+      window.addEventListener('resize', update);
+      // Images load late and change scrollWidth; recheck shortly after.
+      setTimeout(update, 60); setTimeout(update, 600);
+      update();
+    });
+  }
+  global.enhanceScrollers = enhanceScrollers;
+
+  // ── Loading skeletons ─────────────────────────────────────────────────────
+  // Shared placeholders so every data view (browse, collection, profiles) shows
+  // the same shimmer while it loads, not just the search grids.
+  function skeletonCards(n) {
+    var one = '<div class="skeleton-card"><div class="skeleton skel-poster"></div>' +
+      '<div class="skel-info"><div class="skeleton skel-line w80"></div><div class="skeleton skel-line w50"></div></div></div>';
+    return new Array(Math.max(1, n || 10)).fill(one).join('');
+  }
+  function skeletonRows(n) {
+    var one = '<div class="skel-row"><div class="skeleton skel-row-img"></div>' +
+      '<div class="skel-row-body"><div class="skeleton skel-line w50"></div><div class="skeleton skel-line w80"></div></div>' +
+      '<div class="skeleton skel-row-badge"></div></div>';
+    return new Array(Math.max(1, n || 6)).fill(one).join('');
+  }
+  function showSkeleton(target, kind, n) {
+    var el = typeof target === 'string' ? document.getElementById(target) : target;
+    if (!el) return;
+    el.innerHTML = (kind === 'rows') ? skeletonRows(n) : skeletonCards(n);
+  }
+  global.skeletonCards = skeletonCards;
+  global.skeletonRows = skeletonRows;
+  global.showSkeleton = showSkeleton;
+
+  // ── Top navigation progress bar ───────────────────────────────────────────
+  // Gives every page-to-page navigation immediate feedback, and completes when
+  // the incoming page finishes loading.
+  var progressBar = null, progressTimer = null;
+  function ensureProgressBar() {
+    if (progressBar) return progressBar;
+    progressBar = document.createElement('div');
+    progressBar.className = 'top-progress';
+    document.body.appendChild(progressBar);
+    return progressBar;
+  }
+  function startTopProgress() {
+    var bar = ensureProgressBar();
+    clearTimeout(progressTimer);
+    bar.classList.remove('done');
+    bar.style.transition = 'none';
+    bar.style.width = '0%';
+    bar.style.opacity = '1';
+    // force reflow so the width reset applies before we animate
+    void bar.offsetWidth;
+    bar.style.transition = 'width 8s cubic-bezier(0.1, 0.7, 0.1, 1), opacity 0.3s';
+    bar.style.width = '90%';
+  }
+  function finishTopProgress() {
+    if (!progressBar) return;
+    var bar = progressBar;
+    bar.style.transition = 'width 0.25s ease, opacity 0.4s ease 0.2s';
+    bar.style.width = '100%';
+    bar.style.opacity = '0';
+    progressTimer = setTimeout(function () { bar.style.width = '0%'; }, 600);
+  }
+  function mountTopProgress() {
+    if (typeof document === 'undefined' || !document.body) return;
+    ensureProgressBar();
+    if (document.readyState === 'complete') { /* already loaded, no bar */ }
+    else { startTopProgress(); window.addEventListener('load', finishTopProgress); }
+    // Immediate feedback when leaving for another internal page.
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest && e.target.closest('a[href]');
+      if (!a) return;
+      var href = a.getAttribute('href') || '';
+      if (a.target === '_blank' || a.hasAttribute('download') || href[0] === '#' ||
+          /^(mailto:|tel:|javascript:)/i.test(href)) return;
+      if (a.origin && a.origin !== location.origin) return;
+      startTopProgress();
+    }, true);
+    window.addEventListener('pageshow', function (e) { if (e.persisted) finishTopProgress(); });
+  }
+  global.startTopProgress = startTopProgress;
+  global.finishTopProgress = finishTopProgress;
+
   if (typeof document !== 'undefined') {
     initSentry(); // set up as early as possible so init-time errors are caught
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', function () {
         initDensity();
+        mountTopProgress();
         mountAppNav();
         mountPageHeader();
         mountGlobalSearch();
+        mountAppFooter();
         initAnalytics();
       });
     } else {
       initDensity();
+      mountTopProgress();
       mountAppNav();
       mountPageHeader();
       mountGlobalSearch();
+      mountAppFooter();
       initAnalytics();
     }
   }
@@ -914,5 +1096,6 @@
   global.mediaTypeLabel = mediaTypeLabel;
   global.statusLabel = statusLabel;
   global.statusOptions = statusOptions;
+  global.bindScoreInput = bindScoreInput;
   global.MEDIA_STATUS_KEYS = STATUS_KEYS;
 })(typeof window !== 'undefined' ? window : globalThis);

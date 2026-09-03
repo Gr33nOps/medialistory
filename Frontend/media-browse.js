@@ -18,11 +18,16 @@
   var currentSort = 'popularity';
   var currentSortOrder = 'desc';
   var currentPage = 1;
-  var perPage = 20;
+  var perPage = 24;
   var isLoading = false;
   var hasMore = true;
   var lastResults = {}; // ref -> normalized media object (for add-to-library)
   var userCustomLists = [];
+
+  var ANIME_STATUS_LABEL = {
+    finished: 'Finished airing', current: 'Currently airing',
+    upcoming: 'Upcoming', tba: 'To be announced', unreleased: 'Unreleased'
+  };
 
   function byId(id) { return document.getElementById(id); }
 
@@ -102,7 +107,7 @@
       if (trailerEl && trailerEl.dataset.yt) {
         var key = trailerEl.dataset.yt;
         trailerEl.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(key) +
-          '?autoplay=1&rel=0" title="Trailer" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe>';
+          '?autoplay=1&rel=0&modestbranding=1&playsinline=1" title="Trailer" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen loading="lazy"></iframe>';
         trailerEl.classList.add('playing');
         return;
       }
@@ -230,21 +235,8 @@
         var dateStr = new Date(m.released).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
         releasedHtml = '<span class="game-card-date">' + esc(dateStr) + '</span>';
       }
-      var genresHtml = (m.genres || []).slice(0, 3).map(function (g) {
-        return '<span class="genre-tag">' + esc(g.name || g) + '</span>';
-      }).join('');
-      var descHtml = '';
-      if (m.description) {
-        var full = String(m.description);
-        if (full.length > 110) {
-          descHtml = '<p class="game-card-desc">' +
-            '<span class="desc-short">' + esc(full.slice(0, 110)) + '…</span>' +
-            '<span class="desc-full hidden">' + esc(full) + '</span> ' +
-            '<button type="button" class="link-btn show-more-btn">Show more</button></p>';
-        } else {
-          descHtml = '<p class="game-card-desc">' + esc(full) + '</p>';
-        }
-      }
+      // Grid tiles stay poster-first: title + year only. Genres, synopsis and
+      // the rest live in the detail modal, one click away.
       var label = 'View details for ' + (m.name || NOUN);
       var ratingHtml = m.rating ? '<span class="card-rating">★ ' + esc(Number(m.rating).toFixed(1)) + '</span>' : '';
       return '<div class="game-card" data-game-id="' + esc(m.id) + '" role="button" tabindex="0" aria-label="' + esc(label) + '">' +
@@ -255,8 +247,6 @@
         '<div class="game-info">' +
           '<div class="game-title">' + esc(m.name) + '</div>' +
           '<div class="game-card-meta">' + releasedHtml + '</div>' +
-          '<div class="game-genres">' + genresHtml + '</div>' +
-          descHtml +
         '</div>' +
       '</div>';
     }).join('');
@@ -295,6 +285,9 @@
       (MEDIA_TYPE === 'series' && media.number_of_seasons) ? { label: 'Seasons', value: String(media.number_of_seasons) } : null,
       ((MEDIA_TYPE === 'series' || MEDIA_TYPE === 'anime') && media.number_of_episodes) ? { label: 'Episodes', value: String(media.number_of_episodes) } : null,
       (MEDIA_TYPE === 'anime' && media.subtype) ? { label: 'Type', value: String(media.subtype) } : null,
+      (MEDIA_TYPE === 'anime' && media.episode_length) ? { label: 'Episode length', value: media.episode_length + ' min' } : null,
+      (MEDIA_TYPE === 'anime' && media.status) ? { label: 'Status', value: ANIME_STATUS_LABEL[media.status] || media.status } : null,
+      (MEDIA_TYPE === 'anime' && media.age_rating) ? { label: 'Rating', value: String(media.age_rating) } : null,
       (MEDIA_TYPE === 'movie' && media.runtime) ? { label: 'Runtime', value: media.runtime + ' min' } : null
     ].filter(Boolean);
 
@@ -338,9 +331,11 @@
     var trailerHtml = (media.trailer && media.trailer.key)
       ? '<div class="detail-section"><h3 class="detail-h">Trailer</h3>' +
           '<div class="detail-trailer" data-yt="' + esc(media.trailer.key) + '">' +
-            '<img src="https://i.ytimg.com/vi/' + esc(media.trailer.key) + '/hqdefault.jpg" alt="Play trailer" loading="lazy" onerror="this.style.display=\'none\'">' +
+            '<img src="https://i.ytimg.com/vi/' + esc(media.trailer.key) + '/hqdefault.jpg" alt="Play trailer" loading="lazy" onerror="this.src=\'https://i.ytimg.com/vi/' + esc(media.trailer.key) + '/hqdefault.jpg\'">' +
             '<span class="detail-trailer-play" aria-hidden="true"></span>' +
-          '</div></div>'
+          '</div>' +
+          '<a class="detail-trailer-fallback" href="https://www.youtube.com/watch?v=' + esc(media.trailer.key) + '" target="_blank" rel="noopener noreferrer">Trouble playing? Watch on YouTube ↗</a>' +
+        '</div>'
       : '';
     var castHtml = (media.cast && media.cast.length)
       ? '<div class="detail-section"><h3 class="detail-h">Cast</h3><div class="detail-cast">' +
@@ -397,20 +392,24 @@
         '<div class="add-to-list">' +
           '<h3>Add to My Library</h3>' +
           '<div style="margin-bottom:12px;">' +
-            '<label style="display:block;font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:6px;">Add to List</label>' +
+            '<label>Add to list</label>' +
             '<select id="gameListSelect" class="filter-select" style="width:100%;margin:0;">' +
               '<option value="default">' + esc(defaultLabel) + '</option>' + customListOptions +
             '</select>' +
           '</div>' +
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">' +
             '<div>' +
-              '<label style="display:block;font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:6px;">Status</label>' +
+              '<label>Status</label>' +
               '<select id="gameStatus" class="filter-select" style="width:100%;margin:0;">' + statusOptions(MEDIA_TYPE, 'completed') + '</select>' +
             '</div>' +
             '<div>' +
-              '<label style="display:block;font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:6px;">Your Score (1-10)</label>' +
+              '<label>Your score (1-10)</label>' +
               '<div class="score-input-container" style="margin:0;">' +
                 '<input type="number" id="gameScore" class="score-input" min="1" max="10" placeholder="--" style="width:100%;">' +
+                '<div class="score-controls">' +
+                  '<button type="button" class="score-btn" id="mbScoreUp" aria-label="Increase score">+</button>' +
+                  '<button type="button" class="score-btn" id="mbScoreDown" aria-label="Decrease score">−</button>' +
+                '</div>' +
               '</div>' +
             '</div>' +
           '</div>' +
@@ -422,6 +421,8 @@
         similarHtml +
       '</div>';
 
+    if (typeof bindScoreInput === 'function') bindScoreInput('gameScore', 'mbScoreUp', 'mbScoreDown', null);
+    if (typeof window.enhanceScrollers === 'function') window.enhanceScrollers(byId('gameDetails'));
     if (typeof openModal === 'function') openModal('gameModal');
   }
 

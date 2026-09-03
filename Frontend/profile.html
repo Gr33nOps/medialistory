@@ -7,6 +7,9 @@
     <meta name="description" content="Track, rate, and share the movies, shows, anime, and games you love with MediaListory.">
     <meta name="robots" content="noindex,follow">
     <script>try{if(localStorage.getItem('theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap">
     <link rel="stylesheet" href="styles.css">
     <!-- seo:start -->
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -32,10 +35,6 @@
                             <span class="stat-label">Level</span>
                         </div>
                         <div class="stat-item">
-                            <span class="stat-value" id="totalGames">0</span>
-                            <span class="stat-label">Titles Tracked</span>
-                        </div>
-                        <div class="stat-item">
                             <span class="stat-value" id="followersCount">0</span>
                             <span class="stat-label">Followers</span>
                         </div>
@@ -44,7 +43,7 @@
                             <span class="stat-label">Following</span>
                         </div>
                     </div>
-                    <div id="mediaBreakdown" class="profile-media-breakdown" style="margin-top:10px;font-size:0.85rem;color:#94a3b8;"></div>
+                    <div id="mediaBreakdown" class="profile-media-breakdown" style="margin-top:10px;font-size:0.85rem;color:var(--text-muted);"></div>
                 </div>
 
                 <div class="profile-details">
@@ -69,7 +68,6 @@
                 <div class="profile-actions">
                     <button id="editProfileBtn" class="btn btn-primary">Edit Profile</button>
                     <button id="changePasswordBtn" class="btn btn-secondary">Change Password</button>
-                    <a href="stats.html" class="btn btn-secondary">View full stats</a>
                     <button id="importDataBtn" class="btn btn-secondary" type="button">Import a list</button>
                     <button id="exportDataBtn" class="btn btn-secondary" type="button">Export my data</button>
                 </div>
@@ -82,9 +80,14 @@
                             <img id="editAvatarPreview" src="" alt="Profile Avatar" onerror="this.src='https://ui-avatars.com/api/?name=User&size=200&background=3b82f6&color=fff&bold=true'">
                         </div>
                         <div class="avatar-input-group">
-                            <label for="editAvatarUrl">Avatar URL</label>
-                            <input type="url" id="editAvatarUrl" class="form-input" placeholder="Enter image URL">
-                            <small>Enter a direct link to your profile image</small>
+                            <label>Profile picture</label>
+                            <div id="avatarDrop" class="avatar-drop" tabindex="0" role="button" aria-label="Upload a profile picture">
+                                <input type="file" id="avatarFile" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+                                <span class="avatar-drop-main">Drop an image here or <span class="avatar-drop-link">choose a file</span></span>
+                                <small>Any photo from your device. It's cropped to a square and kept small.</small>
+                            </div>
+                            <button type="button" id="avatarClearBtn" class="link-btn" style="display:none;">Remove photo</button>
+                            <input type="hidden" id="editAvatarData">
                         </div>
                     </div>
 
@@ -96,6 +99,19 @@
                     <div class="form-group">
                         <label for="editEmail">Email</label>
                         <input type="email" id="editEmail" class="form-input" required>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="pv-toggle-row">
+                            <div>
+                                <div class="pv-toggle-title">Private account</div>
+                                <div class="pv-toggle-sub">Only approved followers can see your library. New followers have to send a request.</div>
+                            </div>
+                            <label class="pv-switch">
+                                <input type="checkbox" id="editPrivate">
+                                <span class="pv-slider"></span>
+                            </label>
+                        </div>
                     </div>
 
                     <div id="editMessage"></div>

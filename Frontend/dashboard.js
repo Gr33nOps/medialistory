@@ -142,8 +142,8 @@
   var TRENDING = [
     { cat: 'movie',  endpoint: '/tmdb/movies', body: { sort: 'popularity', limit: 14 } },
     { cat: 'series', endpoint: '/tmdb/series', body: { sort: 'popularity', limit: 14 } },
-    { cat: 'anime',  endpoint: '/kitsu/anime', body: { sort: 'popularity', limit: 14 } },
-    { cat: 'game',   endpoint: '/igdb/games',  body: { sort: 'popularity', sortOrder: 'desc', limit: 14 } }
+    { cat: 'anime',  endpoint: '/kitsu/anime', body: { trending: true, limit: 14 } },
+    { cat: 'game',   endpoint: '/igdb/games',  body: { trending: true, limit: 14 } }
   ];
 
   // TMDB/Kitsu proxies return normalized objects; IGDB returns raw shape.
@@ -182,6 +182,7 @@
       html += rowShell('Trending ' + LABEL[t.cat], items.map(posterCard).join(''), CAT_FOR[t.cat]);
     });
     container.innerHTML = html || '<p class="dash-empty">Could not load trending right now. Try refreshing.</p>';
+    if (typeof window.enhanceScrollers === 'function') window.enhanceScrollers(container);
   }
 
   renderHero();

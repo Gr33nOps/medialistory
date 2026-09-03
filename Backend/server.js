@@ -85,14 +85,20 @@ let dbReady = false;
 
 app.use(helmet({
   crossOriginEmbedderPolicy: false,
+  // Helmet defaults Referrer-Policy to "no-referrer", which strips the Referer
+  // header from the YouTube trailer <iframe>. YouTube uses that header to verify
+  // the embedding domain and, when it is missing, refuses to play with a
+  // "Video player configuration error (153)". Sending just the origin restores
+  // playback without leaking full URLs.
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   contentSecurityPolicy: {
     useDefaults: true,
     directives: {
       "default-src": ["'self'"],
       "script-src": ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://www.googletagmanager.com', 'https://*.sentry-cdn.com'],
-      "style-src": ["'self'", "'unsafe-inline'"],
+      "style-src": ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       "img-src": ["'self'", 'data:', 'https:'],
-      "font-src": ["'self'", 'data:'],
+      "font-src": ["'self'", 'data:', 'https://fonts.gstatic.com'],
       "connect-src": ["'self'", FRONTEND_URL, NEON_AUTH_ORIGIN, 'https://*.neon.tech', 'https://www.googletagmanager.com', 'https://www.google-analytics.com', 'https://*.google-analytics.com', 'https://*.sentry.io'].filter(Boolean),
       "object-src": ["'none'"],
       "base-uri": ["'self'"],
@@ -115,7 +121,7 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.json({ limit: '100kb' }));
+app.use(express.json({ limit: '400kb' })); // headroom for uploaded data: URI avatars
 
 // API responses must not be cached - browsers turn GETs into 304s which break fetch().json().
 app.set('etag', false);
@@ -488,13 +494,9 @@ app.get('/profile.html', (req, res) => res.sendFile(path.join(frontendPath, 'pro
 app.get('/myGameList.html', (req, res) => res.sendFile(path.join(frontendPath, 'myGameList.html')));
 app.get('/friends.html', (req, res) => res.sendFile(path.join(frontendPath, 'friends.html')));
 app.get('/userProfile.html', (req, res) => res.sendFile(path.join(frontendPath, 'userProfile.html')));
-app.get('/admin.html', (req, res) => res.sendFile(path.join(frontendPath, 'admin.html')));
-app.get('/moderator.html', (req, res) => res.sendFile(path.join(frontendPath, 'moderator.html')));
 app.get('/terms.html', (req, res) => res.sendFile(path.join(frontendPath, 'terms.html')));
 app.get('/privacy.html', (req, res) => res.sendFile(path.join(frontendPath, 'privacy.html')));
 app.get('/dashboard.html', (req, res) => res.sendFile(path.join(frontendPath, 'dashboard.html')));
-app.get('/stats.html', (req, res) => res.sendFile(path.join(frontendPath, 'stats.html')));
-app.get('/calendar.html', (req, res) => res.sendFile(path.join(frontendPath, 'calendar.html')));
 app.get('/robots.txt', (req, res) => res.sendFile(path.join(frontendPath, 'robots.txt')));
 
 // Sentry error handler must sit after routes and before our own error handler.
