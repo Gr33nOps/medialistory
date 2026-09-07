@@ -166,25 +166,27 @@ h1, h2, h3,
 html {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
-    /* Solid base behind the fixed body gradient so overscroll / tall pages
-       never flash the canvas (matters in both themes). */
-    background: var(--bg-base);
+    /* The deep base gradient lives on the root (the canvas), so the Aurora layer
+       — a negative-z-index child of body — paints ABOVE it. If the gradient sat
+       on body it would repaint over the Aurora and hide it entirely. */
+    background: linear-gradient(180deg, var(--bg-base) 0%, var(--bg-grad-mid) 55%, var(--bg-grad-end) 100%) fixed;
 }
 
 body {
     font-family: var(--font-body);
-    /* Category-themed backdrop: an accent glow at the top that recolors per page
-       (and when switching category tabs), over a deep base gradient. */
-    background:
-        radial-gradient(1900px 1300px at 50% -120px, var(--accent-glow) 0%, transparent 66%),
-        linear-gradient(180deg, var(--bg-base) 0%, var(--bg-grad-mid) 55%, var(--bg-grad-end) 100%);
-    background-attachment: fixed;
+    background: transparent;   /* base is on <html>; Aurora sits between them */
     min-height: 100vh;
     color: var(--text-primary);
     overflow-x: hidden;
-    transition: background 0.45s ease;
     padding-left: env(safe-area-inset-left, 0);
     padding-right: env(safe-area-inset-right, 0);
+}
+/* Light theme keeps a clean, still base with a whisper of the page accent —
+   Aurora is a dark-environment effect and does not render on light. */
+:root[data-theme="light"] html {
+    background:
+        radial-gradient(1600px 1100px at 50% -160px, var(--accent-glow) 0%, transparent 62%),
+        linear-gradient(180deg, var(--bg-base) 0%, var(--bg-grad-mid) 55%, var(--bg-grad-end) 100%) fixed;
 }
 
 img, video, canvas, svg {
@@ -290,7 +292,7 @@ img, video, canvas, svg {
     color: #ffffff;
     box-shadow: 0 2px 10px var(--accent-dim);
 }
-body[data-page="games"] .page-tab.active { color: #1a1206; }
+body[data-page="games"] .page-tab.active { color: #fff; }
 
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
@@ -394,7 +396,7 @@ body[data-page="games"] .page-tab.active { color: #1a1206; }
     transition: filter 0.18s ease;
 }
 .nav-cta:hover { filter: brightness(1.12); }
-body[data-page="games"] .nav-cta, body[data-page="games"] .nav-ava { color: #1a1206; }
+body[data-page="games"] .nav-cta, body[data-page="games"] .nav-ava { color: #fff; }
 
 /* Profile dropdown (holds My profile, admin links, and Log out). */
 .nav-menu { position: relative; }
@@ -682,18 +684,24 @@ body[data-page="games"] .nav-cta, body[data-page="games"] .nav-ava { color: #1a1
     margin-top: 30px;
 }
 
+/* Search, sort and filters all live on ONE row: [ input ][ Sort ][ Filters ][ Search ].
+   The two wrappers use display:contents so their children become flex items of
+   the container, ordered explicitly. */
 .search-container {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
     margin-bottom: 28px;
 }
-
-.search-bar {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 12px;
-}
+.search-bar, .search-filters { display: contents; }
+.search-container .search-input { order: 1; flex: 1 1 260px; min-width: 200px; }
+.search-container #sortBy      { order: 2; }
+.search-container #filterBtn   { order: 3; }
+.search-container #searchBtn,
+.search-container #searchUsersBtn { order: 4; }   /* Search button always on the right */
 
 .search-input {
-    flex: 1;
     padding: 14px 18px;
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -709,9 +717,7 @@ body[data-page="games"] .nav-cta, body[data-page="games"] .nav-ava { color: #1a1
     box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
-.search-input::placeholder { color: rgba(226, 232, 240, 0.5); }
-
-.search-filters { display: flex; gap: 12px; }
+.search-input::placeholder { color: var(--text-dim); opacity: 0.85; }
 
 .filter-select {
     padding: 12px 40px 12px 16px;
@@ -810,10 +816,39 @@ select.update-status-select option,
 .page-info {
     font-size: 15px;
     color: var(--text-secondary);
-    font-weight: 500;
-    min-width: 100px;
+    font-weight: 600;
+    min-width: 84px;
     text-align: center;
+    font-variant-numeric: tabular-nums;
 }
+
+/* Prev / Next: circular arrow buttons matching the scroller nav, tinted to the
+   page's category (visible label kept for screen readers via the button text). */
+.pagination .btn {
+    width: 48px; height: 48px; min-width: 48px; min-height: 48px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 0;                 /* hide the "Previous"/"Next" text visually */
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: none;
+    transition: transform 0.15s ease, filter 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+}
+.pagination .btn::before { font-size: 1.7rem; line-height: 1; font-weight: 400; }
+.pagination #prevPageBtn::before { content: '\2039'; }   /* ‹ */
+.pagination #nextPageBtn::before { content: '\203A'; }   /* › */
+.pagination #prevPageBtn {
+    background: transparent;
+    border: 1px solid var(--accent-border);
+    color: var(--accent-light);
+}
+.pagination #nextPageBtn {
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    color: #fff;
+}
+.pagination .btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
+.pagination #prevPageBtn:hover:not(:disabled) { background: var(--accent-dim); color: var(--text-primary); }
+.pagination .btn:disabled { opacity: 0.4; }
 
 /* Fixed columns so the 24 results per page fill complete rows with no trailing
    gaps. 24 divides evenly by 6 / 4 / 3 / 2, so every breakpoint stays full. */
@@ -1646,6 +1681,17 @@ select.update-status-select option,
     margin-bottom: 7px;
 }
 
+/* Add-to-library controls: Status grows, the score stays compact, and the
+   primary action fills the freed space beside the score. */
+.atl-controls { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; margin-bottom: 4px; }
+.atl-field { display: flex; flex-direction: column; }
+.atl-field-status { flex: 1 1 200px; min-width: 150px; }
+.atl-add { flex: 0 0 auto; align-self: flex-end; height: 46px; white-space: nowrap; }
+@media (max-width: 520px) {
+    .atl-field-status { flex-basis: 100%; }
+    .atl-add { flex: 1 1 100%; }
+}
+
 .score-input-container {
     display: inline-flex;
     align-items: center;
@@ -1702,7 +1748,7 @@ select.update-status-select option,
     filter: brightness(1.12);
     transform: translateY(-1px);
 }
-body[data-page="games"] .score-btn, [data-cat="games"] .score-btn { color: #1a1206; }
+body[data-page="games"] .score-btn, [data-cat="games"] .score-btn { color: #fff; }
 
 .score-clear-btn {
     background: transparent;
@@ -3380,8 +3426,8 @@ body[data-page="games"] .score-btn, [data-cat="games"] .score-btn { color: #1a12
     color: #64748b;
 }
 
-.footer-igdb-text a { color: #3b82f6; text-decoration: none; }
-.footer-igdb-text a:hover { text-decoration: underline; }
+.footer-igdb-text a { color: var(--text-secondary); text-decoration: underline; text-underline-offset: 2px; }
+.footer-igdb-text a:hover { color: var(--text-primary); }
 
 .footer-bottom {
     display: flex;
@@ -3415,8 +3461,10 @@ body[data-page="games"] .score-btn, [data-cat="games"] .score-btn { color: #1a12
         border-radius: var(--radius-lg);
         gap: 6px;
     }
-    .nav-brand { flex: 1; order: 0; font-size: 1.15rem; }
-    .nav-right { order: 1; gap: 2px; }
+    .nav-brand { flex: 0 0 auto; order: 0; font-size: 1.15rem; }
+    /* Push all controls to the right edge so the row fills the bar (no dead
+       space on the right); brand stays hard-left. */
+    .nav-right { order: 1; gap: 4px; margin-left: auto; }
     .nav-toggle { order: 2; display: inline-flex; }
     .nav-primary {
         order: 3;
@@ -3434,25 +3482,28 @@ body[data-page="games"] .score-btn, [data-cat="games"] .score-btn { color: #1a12
     .nav-menu-pop { top: calc(100% + 6px); }
     body.nav-drawer-open { overflow: hidden; }
 
-    .page-tabs { flex-direction: column; }
-    .search-container { gap: 12px; }
-    .search-bar { flex-direction: column; }
-    .search-filters { flex-direction: column; width: 100%; }
-    .search-filters .filter-select,
-    .search-filters .btn,
-    .search-bar .btn,
-    .search-input { width: 100%; }
+    /* Collection / Custom Lists stays a side-by-side 2-segment control on
+       mobile (stacking it made the active tab read as a stray label). */
+    .page-tabs { flex-direction: row; }
+    .page-tab { padding: 11px 12px; font-size: 14px; }
+    /* Search input takes the full first row; sort + Filters + Search share the
+       next row (the container wraps). */
+    .search-container { gap: 10px; }
+    .search-container .search-input { flex: 1 1 100%; }
+    .search-container #sortBy,
+    .search-container #filterBtn,
+    .search-container #searchBtn { flex: 1 1 auto; }
     .filter-group { grid-template-columns: 1fr; }
     .filter-section { padding: 14px; }
     .games-grid { gap: 16px 12px; }
     .game-info { padding: 12px; }
     .game-title { font-size: 0.92rem; margin-bottom: 8px; }
     .pagination {
-        flex-wrap: wrap;
-        gap: 10px;
+        gap: 18px;
         justify-content: center;
     }
-    .pagination .btn { flex: 1 1 120px; }
+    /* Keep the circular arrow buttons — don't let them stretch into pills. */
+    .pagination .btn { flex: 0 0 auto; }
 
     .list-header { flex-direction: column; gap: 15px; align-items: flex-start; }
     .list-header-actions { width: 100%; flex-wrap: wrap; }
@@ -3462,8 +3513,8 @@ body[data-page="games"] .score-btn, [data-cat="games"] .score-btn { color: #1a12
     .list-game-actions { width: 100%; flex-direction: column; }
     .list-game-actions .btn { width: 100%; }
     .profile-avatar-section { flex-direction: column; }
-    .profile-stats { width: 100%; display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-    .profile-stats .stat-item { padding: 14px 10px; }
+    .profile-stats { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .profile-stats .stat-item { padding: 14px 8px; }
     .profile-media-breakdown { justify-content: center; }
     .friend-item { flex-wrap: wrap; padding: 16px; gap: 14px; }
     .friend-avatar { width: 56px; height: 56px; }
@@ -3548,13 +3599,21 @@ body[data-page="games"] .score-btn, [data-cat="games"] .score-btn { color: #1a12
     .coll-item-edit-actions { flex-wrap: wrap; }
     .cl-acc-header { flex-direction: column; align-items: flex-start; padding: 16px 20px; }
     .cl-acc-header-right { width: 100%; }
+    /* Status filters (All / In progress / Completed / Planned / On hold /
+       Dropped) become one swipeable row instead of stacking into 3 rows. */
+    .status-tabs,
+    .my-games-section .status-tabs,
     .cl-acc-status-tabs {
         padding: 0 12px;
         overflow-x: auto;
         flex-wrap: nowrap;
         -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
     }
-    .cl-acc-status-tabs .status-tab { flex: 0 0 auto; }
+    .status-tabs::-webkit-scrollbar,
+    .my-games-section .status-tabs::-webkit-scrollbar,
+    .cl-acc-status-tabs::-webkit-scrollbar { display: none; }
+    .status-tab { flex: 0 0 auto; white-space: nowrap; padding: 13px 15px; }
     #clAccordion .coll-item { padding: 14px 16px; }
     .cl-acc-toolbar .list-header { padding: 14px 16px; }
     .cl-acc-desc { max-width: 100%; }
@@ -3745,15 +3804,15 @@ a:focus-visible {
 .footer-inner { display: flex; flex-wrap: wrap; gap: 48px; justify-content: space-between; margin-bottom: 36px; }
 .footer-brand .brand-name { font-size: 1.15rem; font-weight: 700; color: #e2e8f0; margin-bottom: 10px; letter-spacing: -0.01em; }
 .footer-brand p { max-width: 260px; line-height: 1.65; color: #64748b; }
-.footer-col h4 { font-size: 0.82rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 14px; }
+.footer-col h4 { font-size: 0.82rem; font-weight: 700; text-transform: none; letter-spacing: normal; color: var(--text-secondary); margin-bottom: 14px; }
 .footer-col ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
 .footer-col ul li a { color: #64748b; text-decoration: none; transition: color 0.18s; }
 .footer-col ul li a:hover { color: #e2e8f0; }
 .footer-igdb { display: flex; align-items: center; gap: 12px; padding: 14px 18px; background: var(--bg-deep); border: 1px solid var(--border-subtle); border-radius: 10px; margin-bottom: 28px; }
 .footer-igdb img { height: 26px; width: auto; flex-shrink: 0; }
 .footer-igdb-text { font-size: 0.78rem; line-height: 1.6; color: #64748b; }
-.footer-igdb-text a { color: #3b82f6; text-decoration: none; }
-.footer-igdb-text a:hover { text-decoration: underline; }
+.footer-igdb-text a { color: var(--text-secondary); text-decoration: underline; text-underline-offset: 2px; }
+.footer-igdb-text a:hover { color: var(--text-primary); }
 .footer-bottom { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding-top: 20px; border-top: 1px solid #1e293b; font-size: 0.78rem; color: #475569; }
 .footer-bottom-links { display: flex; gap: 20px; }
 .footer-bottom-links a { color: #475569; text-decoration: none; transition: color 0.18s; }
@@ -3776,35 +3835,14 @@ a:focus-visible {
 body[data-page="movies"], [data-cat="movies"] { --accent: var(--cat-movie);  --accent-light: var(--cat-movie-light);  --accent-dim: var(--cat-movie-dim);  --accent-border: var(--cat-movie-border); --accent-glow: rgba(59,130,246,0.50); }
 body[data-page="series"], [data-cat="series"] { --accent: var(--cat-series); --accent-light: var(--cat-series-light); --accent-dim: var(--cat-series-dim); --accent-border: var(--cat-series-border); --accent-glow: rgba(16,185,129,0.46); }
 body[data-page="anime"],  [data-cat="anime"]  { --accent: var(--cat-anime);  --accent-light: var(--cat-anime-light);  --accent-dim: var(--cat-anime-dim);  --accent-border: var(--cat-anime-border); --accent-glow: rgba(236,72,153,0.48); }
+/* Games keeps its vibrant brand amber for fills; white button text stays legible
+   via a soft warm shadow (see the games text-shadow rule) — no burnt-orange, no
+   harsh black-on-yellow. */
 body[data-page="games"],  [data-cat="games"]  { --accent: var(--cat-game);   --accent-light: var(--cat-game-light);   --accent-dim: var(--cat-game-dim);   --accent-border: var(--cat-game-border); --accent-glow: rgba(245,158,11,0.46); }
 
-/* Dark theme only: warm the surfaces (nav, cards, inputs, panels) toward the
-   active category so the whole page belongs to that colour instead of sitting
-   as navy islands on the wash. Light theme keeps its clean white surfaces. */
-:root:not([data-theme="light"]) body[data-page="movies"] {
-    --bg-base: color-mix(in srgb, var(--cat-movie) 10%, #0a0c12);
-    --bg-card: color-mix(in srgb, var(--cat-movie) 12%, #1c2432);
-    --bg-deep: color-mix(in srgb, var(--cat-movie) 11%, #0e1119);
-    --border-subtle: color-mix(in srgb, var(--cat-movie) 22%, rgba(71,85,105,0.3));
-}
-:root:not([data-theme="light"]) body[data-page="series"] {
-    --bg-base: color-mix(in srgb, var(--cat-series) 10%, #0a0c12);
-    --bg-card: color-mix(in srgb, var(--cat-series) 12%, #1c2432);
-    --bg-deep: color-mix(in srgb, var(--cat-series) 11%, #0e1119);
-    --border-subtle: color-mix(in srgb, var(--cat-series) 22%, rgba(71,85,105,0.3));
-}
-:root:not([data-theme="light"]) body[data-page="anime"] {
-    --bg-base: color-mix(in srgb, var(--cat-anime) 10%, #0a0c12);
-    --bg-card: color-mix(in srgb, var(--cat-anime) 12%, #1c2432);
-    --bg-deep: color-mix(in srgb, var(--cat-anime) 11%, #0e1119);
-    --border-subtle: color-mix(in srgb, var(--cat-anime) 22%, rgba(71,85,105,0.3));
-}
-:root:not([data-theme="light"]) body[data-page="games"] {
-    --bg-base: color-mix(in srgb, var(--cat-game) 10%, #0a0c12);
-    --bg-card: color-mix(in srgb, var(--cat-game) 12%, #1c2432);
-    --bg-deep: color-mix(in srgb, var(--cat-game) 11%, #0e1119);
-    --border-subtle: color-mix(in srgb, var(--cat-game) 22%, rgba(71,85,105,0.3));
-}
+/* Surfaces stay a single neutral dark on every page — the category colour now
+   comes ONLY from the Aurora nebula behind them, so there is one cohesive space
+   gradient per page instead of a flat surface tint clashing with the wash. */
 /* My Library, Following, and Profile stay neutral (inherit :root) and only
    pick up a category color when a category filter is chosen inside the page. */
 
@@ -3855,7 +3893,7 @@ body[data-page="games"],  [data-cat="games"]  { --accent: var(--cat-game);   --a
 .nav-actions .btn[data-cat="movies"].active { background: linear-gradient(135deg, var(--cat-movie) 0%, #1d4ed8 100%); box-shadow: var(--shadow-btn) var(--cat-movie-dim); }
 .nav-actions .btn[data-cat="series"].active { background: linear-gradient(135deg, var(--cat-series) 0%, var(--green-dark) 100%); box-shadow: var(--shadow-btn) var(--cat-series-dim); }
 .nav-actions .btn[data-cat="anime"].active  { background: linear-gradient(135deg, var(--cat-anime) 0%, #be185d 100%); box-shadow: var(--shadow-btn) var(--cat-anime-dim); }
-.nav-actions .btn[data-cat="games"].active  { background: linear-gradient(135deg, var(--cat-game) 0%, var(--amber-dark) 100%); color: #1a1206; box-shadow: var(--shadow-btn) var(--cat-game-dim); }
+.nav-actions .btn[data-cat="games"].active  { background: var(--cat-game); color: #fff; text-shadow: 0 1px 2px rgba(66,32,0,0.55); box-shadow: var(--shadow-btn) var(--cat-game-dim); }
 .nav-actions .btn[data-cat].active::before { background: #fff; box-shadow: none; }
 
 /* ── Collection category tabs (My Library) — colored per category ─────── */
@@ -3913,10 +3951,20 @@ body[data-page="games"],  [data-cat="games"]  { --accent: var(--cat-game);   --a
     transition: box-shadow 0.25s ease, border-color 0.25s ease;
 }
 /* Amber (Games) needs dark text for legible contrast on its fills. */
+/* White button text on the vibrant amber stays legible with a soft warm shadow
+   (keeps the bright brand gold instead of a burnt deep amber or harsh black). */
 body[data-page="games"] .btn-primary,
 body[data-page="games"] .search-container .btn-primary,
-body[data-page="games"] .nav-actions .btn.active {
-    color: #1a1206;
+body[data-page="games"] .nav-actions .btn.active,
+body[data-page="games"] .pagination #nextPageBtn,
+body[data-page="games"] .nav-cta,
+body[data-page="games"] .score-btn,
+[data-cat="games"] .score-btn,
+body[data-page="games"] .page-tab.active,
+body[data-page="games"] .year-chip.active,
+body[data-page="games"] .cal-chip.active {
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(66, 32, 0, 0.6);
 }
 
 /* ── Mobile navigation drawer polish ──────────────────────────────────── */
@@ -4121,7 +4169,12 @@ body.gsearch-open { overflow: hidden; }
 .gsearch-item-name { color: var(--text-primary); font-weight: 600; font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gsearch-item-meta { color: var(--text-muted); font-size: 0.78rem; }
 .gsearch-item:hover, .gsearch-item.active { background: var(--accent-dim); }
-@media (max-width: 600px) { .gsearch { padding-top: 6vh; } }
+@media (max-width: 600px) {
+    .gsearch { padding-top: 6vh; }
+    /* No physical Esc key on touch — drop the badge so the placeholder isn't clipped. */
+    .gsearch-esc { display: none; }
+    .gsearch-bar input { font-size: 1rem; }
+}
 
 /* ── Light-theme fixups for components with hardcoded dark-theme colors ─── */
 :root[data-theme="light"] .site-footer { color: var(--text-muted); }
@@ -4139,7 +4192,7 @@ body.gsearch-open { overflow: hidden; }
 .year-chip { padding: 6px 14px; border-radius: var(--radius-pill); border: 1px solid var(--border-subtle); background: var(--bg-card); color: var(--text-secondary); font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: var(--transition-fast); }
 .year-chip:hover { border-color: var(--accent-border); color: var(--text-primary); }
 .year-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-body[data-page="games"] .year-chip.active { color: #1a1206; }
+body[data-page="games"] .year-chip.active { color: #fff; }
 
 .stats-loading, .stats-empty { text-align: center; padding: 60px 20px; color: var(--text-muted); }
 .stats-empty p { margin-bottom: 8px; font-size: 1.05rem; color: var(--text-secondary); }
@@ -4218,7 +4271,7 @@ body[data-page="games"] .year-chip.active { color: #1a1206; }
 .cal-chip { padding: 6px 14px; border-radius: var(--radius-pill); border: 1px solid var(--border-subtle); background: var(--bg-card); color: var(--text-secondary); font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: var(--transition-fast); }
 .cal-chip:hover { border-color: var(--accent-border); color: var(--text-primary); }
 .cal-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-body[data-page="games"] .cal-chip.active { color: #1a1206; }
+body[data-page="games"] .cal-chip.active { color: #fff; }
 
 .cal-watchlist { margin-bottom: 26px; }
 .cal-month { margin-bottom: 26px; }
@@ -4290,8 +4343,8 @@ body.imp-open { overflow: hidden; }
 .pv-toggle-sub { font-size: 0.82rem; color: var(--text-muted); margin-top: 2px; max-width: 46ch; }
 .pv-switch { position: relative; display: inline-block; width: 46px; height: 26px; flex-shrink: 0; }
 .pv-switch input { opacity: 0; width: 0; height: 0; }
-.pv-slider { position: absolute; inset: 0; background: var(--bg-card-end); border: 1px solid var(--border); border-radius: 999px; transition: .2s; cursor: pointer; }
-.pv-slider::before { content: ""; position: absolute; height: 18px; width: 18px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+.pv-slider { position: absolute; inset: 0; background: var(--border); border: 1px solid var(--border); border-radius: 999px; transition: .2s; cursor: pointer; }
+.pv-slider::before { content: ""; position: absolute; height: 18px; width: 18px; left: 3px; top: 3px; background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.35); transition: .2s; }
 .pv-switch input:checked + .pv-slider { background: var(--accent); border-color: var(--accent); }
 .pv-switch input:checked + .pv-slider::before { transform: translateX(20px); }
 .pv-switch input:focus-visible + .pv-slider { outline: 2px solid var(--accent-light); outline-offset: 2px; }
@@ -4309,14 +4362,9 @@ body.imp-open { overflow: hidden; }
 .dash-scroller::-webkit-scrollbar, .detail-cast::-webkit-scrollbar, .detail-similar::-webkit-scrollbar, .detail-shots::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
 .scroller { position: relative; }
-.scroller::before, .scroller::after { content: ""; position: absolute; top: 0; bottom: 0; width: 56px; pointer-events: none; z-index: 2; opacity: 0; transition: opacity 0.2s ease; }
-.scroller::before { left: 0; background: linear-gradient(90deg, var(--scroller-fade, var(--bg-base)), transparent); }
-.scroller::after  { right: 0; background: linear-gradient(270deg, var(--scroller-fade, var(--bg-base)), transparent); }
-/* Inside a detail modal the strip sits on the card surface, not the page base,
-   so the fade must match that surface instead of bleeding to near-black. */
-.modal-content { --scroller-fade: var(--bg-card); }
-.scroller:not(.at-start)::before { opacity: 1; }
-.scroller:not(.at-end):not(.no-scroll)::after { opacity: 1; }
+/* Edge fade removed — it read as a dark smudge over the Aurora; the arrow
+   buttons alone signal there's more to scroll. */
+.scroller::before, .scroller::after { display: none; }
 .scroller-arrow {
     position: absolute; top: 40%; transform: translateY(-50%); z-index: 3;
     width: 38px; height: 38px; border-radius: 50%;
@@ -4387,8 +4435,7 @@ body.imp-open { overflow: hidden; }
 .coll-item:hover .coll-item-img img { transform: scale(1.05); }
 
 /* Thread the page's category accent into content, not just the top bar. */
-.stats-dashboard { border-left: 3px solid var(--accent); }
-.section-title-accent { border-left: 3px solid var(--accent); padding-left: 12px; }
+/* (left accent bar removed per request) */
 
 @media (prefers-reduced-motion: no-preference) {
     /* A grid of freshly-loaded results fades in once as a group — no per-card
@@ -4401,3 +4448,260 @@ body.imp-open { overflow: hidden; }
 /* Reserve the navbar height before common.js mounts it, so a fast navigation
    doesn't flash a collapsed top and jump when the nav appears. */
 #appNav:empty { display: block; min-height: 62px; }
+
+/* Profile › Your data: import, per-category export, and full backup. */
+.data-tools { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--border-subtle); }
+.data-tools-h { font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0 0 12px; }
+.data-tools-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.data-export { display: inline-flex; align-items: center; gap: 8px; }
+.data-export .filter-select { margin: 0; }
+.data-tools-note { margin: 12px 0 0; font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; max-width: 66ch; }
+@media (max-width: 560px) {
+    .data-tools-row { flex-direction: column; align-items: stretch; }
+    .data-export { justify-content: space-between; }
+    .data-export .filter-select { flex: 1; }
+}
+
+/* ══ AURORA — animated gradient-blob atmosphere ═════════════════════════════
+   Moving luminous light in the brand's own colours (the four media hues), used
+   as an environmental background behind content — not inside cards. One reusable
+   system (mountAurora injects the layer + sets intensity per page). Dark theme
+   only; light theme keeps its clean base. See ~/.claude/skills/aurora. */
+
+/* Blob palette per page: the active category's colour dominates (--au-1),
+   with two harmonising brand hues. Neutral pages use the multi-media trio. */
+/* ONE colour per context — all three blobs share a single hue so the background
+   is a single-colour moving glow, never a multi-colour mix. Default/neutral
+   pages (dashboard, library, following, profile, user profile) use plain grey. */
+:root { --au-1: #64748b; --au-2: #64748b; --au-3: #64748b; --aurora-blur: 72px; }
+body[data-page="movies"] { --au-1: #3b82f6; --au-2: #3b82f6; --au-3: #3b82f6; }
+body[data-page="series"] { --au-1: #10b981; --au-2: #10b981; --au-3: #10b981; }
+body[data-page="anime"]  { --au-1: #ec4899; --au-2: #ec4899; --au-3: #ec4899; }
+body[data-page="games"]  { --au-1: #f59e0b; --au-2: #f59e0b; --au-3: #f59e0b; }
+
+.aurora {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+    /* Screen-blend the whole layer onto the dark base so the colour reads as
+       emitted light. (The blend must live here, not on the blobs — the layer's
+       own stacking context would otherwise trap it.) */
+    mix-blend-mode: screen;
+    --aurora-mult: 0.55;               /* default = subtle (app/content pages) */
+}
+.aurora[data-i="strong"]   { --aurora-mult: 1; }
+.aurora[data-i="moderate"] { --aurora-mult: 0.66; }
+.aurora[data-i="subtle"]   { --aurora-mult: 0.42; }
+:root[data-theme="light"] .aurora { display: none; }
+
+.aurora-blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(var(--aurora-blur));
+    will-change: transform;
+    transition: opacity 0.6s ease;
+}
+.aurora-blob-1 { width: 46vmax; height: 46vmax; top: -14%; left: -12%;  background: var(--au-1); opacity: calc(0.85 * var(--aurora-mult)); animation: aurora-drift-1 23s ease-in-out infinite; }
+.aurora-blob-2 { width: 38vmax; height: 38vmax; top:   4%; right: -14%; background: var(--au-2); opacity: calc(0.68 * var(--aurora-mult)); animation: aurora-drift-2 31s ease-in-out infinite; }
+.aurora-blob-3 { width: 32vmax; height: 32vmax; bottom:-16%; left: 26%; background: var(--au-3); opacity: calc(0.55 * var(--aurora-mult)); animation: aurora-drift-3 19s ease-in-out infinite; }
+
+@keyframes aurora-drift-1 {
+    0%   { transform: translate3d(0, 0, 0); }
+    25%  { transform: translate3d(24%, 14%, 0); }
+    50%  { transform: translate3d(10%, 34%, 0); }
+    75%  { transform: translate3d(-12%, 10%, 0); }
+    100% { transform: translate3d(0, 0, 0); }
+}
+@keyframes aurora-drift-2 {
+    0%   { transform: translate3d(0, 0, 0); }
+    25%  { transform: translate3d(-18%, 20%, 0); }
+    50%  { transform: translate3d(-6%, -14%, 0); }
+    75%  { transform: translate3d(14%, 8%, 0); }
+    100% { transform: translate3d(0, 0, 0); }
+}
+@keyframes aurora-drift-3 {
+    0%   { transform: translate3d(0, 0, 0); }
+    25%  { transform: translate3d(16%, -18%, 0); }
+    50%  { transform: translate3d(-14%, -6%, 0); }
+    75%  { transform: translate3d(8%, 20%, 0); }
+    100% { transform: translate3d(0, 0, 0); }
+}
+
+/* Mobile: recompose (not a cropped desktop) — fewer/softer, lower blur, no overflow. */
+@media (max-width: 640px) {
+    .aurora { --aurora-blur: 48px; }
+    .aurora-blob-1 { width: 78vw; height: 78vw; top: -12%; left: -18%; }
+    .aurora-blob-2 { width: 66vw; height: 66vw; top: 30%; right: -22%; }
+    .aurora-blob-3 { display: none; }   /* two blobs is enough on a phone */
+}
+
+/* Reduced motion: hold a composed, still Aurora (no drift). */
+@media (prefers-reduced-motion: reduce) {
+    .aurora-blob { animation: none !important; }
+}
+
+/* Phone layouts: keep desktop rules above intact. */
+@media (max-width: 600px) {
+    .container { padding: 12px; }
+
+    /* Keep the brand, account and menu on one row. Secondary utilities
+       belong inside the expanded menu, where they have room to tap. */
+    .navbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        gap: 8px;
+        padding: 8px 10px;
+        margin-bottom: 22px;
+    }
+    .nav-brand { grid-area: 1 / 1; font-size: 1.1rem; }
+    .nav-right { display: contents; }
+    .nav-right > .nav-menu,
+    .nav-right > .nav-cta { grid-area: 1 / 2; }
+    .nav-toggle { grid-area: 1 / 3; width: 44px; height: 44px; }
+    .nav-menu-trigger { min-width: 44px; min-height: 44px; justify-content: center; }
+    .nav-cta { min-height: 44px; display: inline-flex; align-items: center; }
+    .nav-right > .nav-icon-btn { display: none; }
+    .navbar.is-open .nav-primary {
+        grid-area: 2 / 1 / auto / -1;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+    .navbar.is-open .nav-icon-btn { display: inline-flex; min-width: 44px; height: 44px; }
+    .navbar.is-open #navSearchBtn { grid-area: 3 / 1; width: 100%; justify-content: flex-start; padding: 0 14px; gap: 10px; }
+    .navbar.is-open #navSearchBtn::after { content: "Search"; font-family: var(--font-body); font-size: 0.95rem; }
+    .navbar.is-open #navPeopleBtn { grid-area: 3 / 2; }
+    .navbar.is-open #navThemeBtn { grid-area: 3 / 3; }
+    .nav-menu-pop { max-width: calc(100vw - 80px); }
+    .nav-menu-item { min-height: 44px; }
+    /* The menu expands in document flow; allow scrolling on short screens. */
+    body.nav-drawer-open:not(.gsearch-open) { overflow: auto; }
+
+    .page-header { margin-bottom: 20px; padding: 0 4px; }
+    .page-header-title { font-size: 1.65rem; line-height: 1.2; }
+    .page-header-sub { max-width: 36ch; }
+    .search-container { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; margin-bottom: 22px; }
+    .search-container .search-bar, .search-container .search-filters { display: contents; }
+    .search-container .search-input { grid-area: 1 / 1; width: 100%; min-width: 0; }
+    .search-container #searchBtn { grid-area: 1 / 2; }
+    .search-container #sortBy { grid-area: 2 / 1; width: 100%; }
+    .search-container #filterBtn { grid-area: 2 / 2; }
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    select, textarea { font-size: 16px; }
+    .search-input, .filter-select, .form-input { min-width: 0; max-width: 100%; font-size: 16px; }
+    .container select.filter-select { font-size: 16px; }
+    .cl-modal-box select, .cl-modal-box textarea, .cl-modal-box input { font-size: 16px; }
+    .gsearch-bar input { min-width: 0; }
+    .btn, .filter-select, .media-tab, .page-tab, .oauth-btn { min-height: 44px; }
+    .search-filters { min-width: 0; }
+    .filter-actions { display: flex; gap: 8px; }
+    .filter-actions .btn { flex: 1; }
+    .games-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 12px; }
+    .game-info { padding: 10px 2px; }
+    .game-title { font-size: 0.92rem; line-height: 1.35; }
+
+    .page-tabs, .media-tabs { min-width: 0; }
+    .media-tabs { flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding-bottom: 4px; scrollbar-width: none; }
+    .media-tabs::-webkit-scrollbar { display: none; }
+    .media-tab { flex: 0 0 auto; white-space: nowrap; }
+    .page-tab { min-width: 0; }
+    .list-header, .profile-header { padding: 18px 16px; }
+    .list-header h2 { font-size: 1.2rem; }
+    .list-header-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; min-width: 0; }
+    .list-header-actions .search-input, .list-header-actions .filter-select { grid-column: 1 / -1; }
+    .list-header-actions .search-input { flex: 1 1 100%; width: 100%; }
+    .list-header-actions .filter-select { flex: 1 1 140px; }
+    .stats-dashboard { padding: 18px 16px; }
+    .stats-dashboard .stats-title { margin-bottom: 16px; }
+    .overview-split { flex-wrap: nowrap; gap: 16px; align-items: center; }
+    .overview-bars { flex: 1; min-width: 0; gap: 12px; }
+    .overview-pie-col { flex: 0 0 80px; gap: 8px; }
+    .overview-pie-col .pie-chart-container { width: 80px; }
+    .ov-total-num { font-size: 1.35rem; }
+    .ov-bar-head { gap: 6px; font-size: 0.8rem; }
+    .my-games-list.as-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .coll-item, .my-games-list:not(.as-grid) .coll-item.list-item, .my-games-list:not(.as-grid) .coll-item.cl-list-item { padding: 14px 16px; }
+    .my-games-list:not(.as-grid) .coll-item.list-item .coll-item-body,
+    .my-games-list:not(.as-grid) .coll-item.cl-list-item .coll-item-body { flex-direction: column; align-items: stretch; gap: 8px; }
+    .container .my-games-section .status-tabs, .container .cl-acc-status-tabs { flex-wrap: nowrap; padding-inline: 12px; }
+    .coll-item-body, .coll-item-main, .coll-item-right { min-width: 0; }
+    .coll-item-meta, .coll-item-right { flex-wrap: wrap; }
+
+    .profile-content { padding: 20px 16px; }
+    .profile-avatar-section { gap: 16px; margin-bottom: 20px; }
+    .profile-avatar { width: 88px; height: 88px; }
+    #profileDisplay .profile-avatar-section {
+        display: grid;
+        grid-template-columns: 72px minmax(0, 1fr);
+        gap: 12px;
+    }
+    #profileDisplay .profile-avatar { width: 72px; height: 72px; }
+    #profileDisplay .profile-media-breakdown { grid-column: 1 / -1; }
+    .profile-avatar-section > div { min-width: 0; max-width: 100%; }
+    .profile-stats { gap: 4px; }
+    .profile-stats .stat-item { padding: 8px 0; }
+    .stat-item .stat-value { font-size: 1.5rem; }
+    .stat-item .stat-label { font-size: 0.75rem; }
+    .profile-details { grid-template-columns: minmax(0, 1fr); gap: 0; margin-bottom: 18px; }
+    .detail-item { padding: 12px 0; }
+    .detail-item label { margin-bottom: 5px; }
+    .detail-value { font-size: 1rem; overflow-wrap: anywhere; }
+    .profile-actions { flex-wrap: wrap; gap: 8px; }
+    .profile-actions .btn { flex: 1 1 120px; padding-inline: 10px; white-space: normal; }
+    .edit-avatar-section { display: flex; flex-direction: column; align-items: stretch; gap: 16px; margin-bottom: 20px; }
+    .edit-avatar-section .profile-avatar { align-self: center; }
+    .avatar-input-group { min-width: 0; }
+    .friend-name, .friend-username { overflow-wrap: anywhere; }
+    .data-export { min-width: 0; }
+    .data-export .filter-select { min-width: 0; }
+
+    .modal, .update-modal, .remove-modal, .cl-modal-overlay, .cl-game-modal-overlay { padding: 10px; }
+    .modal-content, .update-modal-content, .remove-modal-content,
+    .cl-modal-box, .cl-game-modal-box {
+        width: 100%;
+        max-width: 100%;
+        max-height: calc(100dvh - 20px);
+        border-radius: 16px;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+    .update-modal-content, .remove-modal-content { padding: 22px 16px; }
+    .score-input-container { flex-wrap: wrap; }
+    .score-input-container .score-input { min-width: 0; }
+    .score-input-container .score-controls { flex-direction: row; gap: 6px; }
+    .score-input-container .score-btn { width: 44px; height: 44px; }
+    .score-input-container .score-clear-btn { flex: 1 1 100%; }
+    .cl-modal-box { padding: 22px 16px; }
+    .cl-modal-box h3 { padding-right: 44px; }
+    .close-btn, .cl-modal-close, .cl-game-modal-close-btn { width: 44px; height: 44px; }
+    .cl-modal-close { top: 10px; right: 10px; }
+    .game-detail-body { padding: 0 16px 20px; }
+    .game-detail-title-row { flex-direction: row; align-items: flex-end; gap: 12px; }
+    .game-detail-title { font-size: 1.2rem; overflow-wrap: anywhere; }
+    .game-detail-cover { width: 72px; height: 96px; }
+    .game-detail-info-label { min-width: 72px; }
+    .game-detail-info-value { min-width: 0; overflow-wrap: anywhere; }
+    .cl-modal-actions { flex-wrap: wrap; gap: 8px; }
+    .cl-modal-actions .btn { flex: 1; }
+    .gsearch, .imp-overlay { padding: 12px; }
+    .gsearch-box, .imp-box { max-height: calc(100dvh - 24px); }
+    .dash-upnext { grid-template-columns: minmax(0, 1fr); }
+    .dash-hero-sub { line-height: 1.55; font-size: 0.95rem; }
+    .dash-hero-cta { gap: 10px; }
+    .dash-hero-cta .btn { flex: 1 1 100%; }
+
+    .site-footer { margin-top: 36px; padding-top: 28px; }
+    .footer-inner { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 16px; }
+    .footer-brand { grid-column: 1 / -1; }
+    .footer-brand p { max-width: 38ch; }
+    .footer-col { min-width: 0; }
+    .footer-col ul { gap: 0; }
+    .footer-col ul li a { display: inline-flex; align-items: center; min-height: 44px; color: var(--text-muted); }
+    .footer-bottom-links { flex-wrap: wrap; gap: 4px 16px; }
+    .footer-bottom-links a { display: inline-flex; align-items: center; min-height: 44px; }
+    .footer-igdb { align-items: flex-start; }
+    .footer-igdb-text { min-width: 0; overflow-wrap: anywhere; }
+    .toast-host { left: 12px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); max-width: none; }
+}
