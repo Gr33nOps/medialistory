@@ -67,6 +67,10 @@ if (dbTarget) {
 }
 
 const app = express();
+// Render terminates TLS in front of the app. Without this, req.protocol reports
+// http, and the absolute avatar URLs built from it would be blocked as mixed
+// content on the https frontend.
+app.set('trust proxy', 1);
 function normalizeFrontendUrl(raw) {
   let url = String(raw || 'http://localhost:3000').trim().replace(/\/$/, '');
   // Browsers send Origin with a scheme; bare hostnames in env break CORS.
@@ -111,9 +115,25 @@ app.use(helmet({
 app.use(compression());
 app.use(morgan(IS_PROD ? 'combined' : 'dev'));
 
+// Extra browser origins allowed to call the API (comma-separated), e.g. Vercel
+// preview deployments. FRONTEND_URL is always allowed on top of these.
+const EXTRA_ORIGINS = String(process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+  .map((s) => normalizeFrontendUrl(s))
+  .filter((s) => /^https?:\/\//i.test(s));
+// This service still serves the frontend statically as a same-origin fallback
+// (see the "/" static handler below), so its own origin must stay allowed
+// even when FRONTEND_URL points elsewhere (e.g. the Vercel split).
+const BACKEND_ORIGIN = process.env.BACKEND_URL ? normalizeFrontendUrl(process.env.BACKEND_URL) : null;
+const ALLOWED_ORIGINS = new Set([FRONTEND_URL, BACKEND_ORIGIN, ...EXTRA_ORIGINS].filter(Boolean));
+
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || origin === FRONTEND_URL || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+    if (!origin ||
+        ALLOWED_ORIGINS.has(origin) ||
+        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
       return callback(null, true);
     }
     return callback(new Error('Not allowed by CORS'));
@@ -363,11 +383,11 @@ try {
 }
 
 try {
-  const myGameListRoutes = require('./myGameList');
-  app.use('/api/user', myGameListRoutes(db, verifyToken, checkBanned));
-  console.log('  MyGameList routes loaded');
+  const libraryRoutes = require('./library');
+  app.use('/api/user', libraryRoutes(db, verifyToken, checkBanned));
+  console.log('  Library routes loaded');
 } catch (error) {
-  console.error('  Error loading myGameList routes:', error.message);
+  console.error('  Error loading library routes:', error.message);
   process.exit(1);
 }
 
@@ -439,7 +459,7 @@ try {
   const authRoutes = require('./auth');
   const homeRoutes = require('./home');
   const profileRoutes = require('./profile');
-  const myGameListRoutes = require('./myGameList');
+  const libraryRoutes = require('./library');
   const friendsRoutes = require('./friends');
   const userProfileRoutes = require('./userProfile');
   const adminRoutes = require('./admin');
@@ -451,7 +471,7 @@ try {
   app.use('/api/v1/auth', authLimiter, authRoutes(db, jwt, JWT_SECRET, verifyToken, checkBanned));
   app.use('/api/v1', homeRoutes(db));
   app.use('/api/v1/user', profileRoutes(db, verifyToken, checkBanned));
-  app.use('/api/v1/user', myGameListRoutes(db, verifyToken, checkBanned));
+  app.use('/api/v1/user', libraryRoutes(db, verifyToken, checkBanned));
   app.use('/api/v1', friendsRoutes(db, verifyToken, checkBanned));
   app.use('/api/v1/users', userProfileRoutes(db, verifyToken, checkBanned));
   app.use('/api/v1/admin', adminRoutes(db, verifyToken, verifyModerator, verifyAdmin, logModeratorActivity));
@@ -484,14 +504,14 @@ app.use(express.static(frontendPath, {
 }));
 
 app.get('/', (req, res) => res.sendFile(path.join(frontendPath, 'dashboard.html')));
-app.get('/index.html', (req, res) => res.sendFile(path.join(frontendPath, 'home.html')));
+app.get('/index.html', (req, res) => res.sendFile(path.join(frontendPath, 'dashboard.html')));
 app.get('/auth.html', (req, res) => res.sendFile(path.join(frontendPath, 'auth.html')));
 app.get('/home.html', (req, res) => res.sendFile(path.join(frontendPath, 'home.html')));
 app.get('/movies.html', (req, res) => res.sendFile(path.join(frontendPath, 'movies.html')));
 app.get('/series.html', (req, res) => res.sendFile(path.join(frontendPath, 'series.html')));
 app.get('/anime.html', (req, res) => res.sendFile(path.join(frontendPath, 'anime.html')));
 app.get('/profile.html', (req, res) => res.sendFile(path.join(frontendPath, 'profile.html')));
-app.get('/myGameList.html', (req, res) => res.sendFile(path.join(frontendPath, 'myGameList.html')));
+app.get('/library.html', (req, res) => res.sendFile(path.join(frontendPath, 'library.html')));
 app.get('/friends.html', (req, res) => res.sendFile(path.join(frontendPath, 'friends.html')));
 app.get('/userProfile.html', (req, res) => res.sendFile(path.join(frontendPath, 'userProfile.html')));
 app.get('/terms.html', (req, res) => res.sendFile(path.join(frontendPath, 'terms.html')));

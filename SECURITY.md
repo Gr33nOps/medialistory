@@ -4,7 +4,7 @@
 
 If you find a security issue in MediaListory, please **do not open a public issue**.
 Instead, report it privately via GitHub's
-[**Report a vulnerability**](https://github.com/Gr33nOps/MediaListory/security/advisories/new)
+[**Report a vulnerability**](https://github.com/Gr33nOps/medialistory/security/advisories/new)
 (Security → Advisories), which opens a private channel with the maintainer.
 
 Please include:
@@ -19,7 +19,7 @@ window to fix the issue before any public disclosure.
 ## Scope
 
 In scope: this repository and the live app at
-[medialistory.onrender.com](https://medialistory.onrender.com) — for example
+[medialistory.onrender.com](https://medialistory.onrender.com) - for example
 authentication/session handling, access control between users, injection, or
 data exposure.
 

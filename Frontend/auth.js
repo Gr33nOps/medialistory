@@ -101,9 +101,28 @@ async function handleOAuthReturn() {
 
     showOAuthWorking();
     try {
-        // Our server already set the httpOnly session cookie; hydrate from it (same-origin).
         var restored = null;
-        if (typeof ensureSession === 'function') restored = await ensureSession();
+
+        // Cross-origin (Vercel frontend → Render API): the session cookie the
+        // callback set lives on the API origin and SameSite=Lax won't send it
+        // here, so the callback also hands back a single-use code. Exchange it
+        // for the JWT and store it (same mechanism as email/password login).
+        var code = urlParams.get('code');
+        if (code) {
+            var ex = await fetch(API_BASE + '/auth/oauth/exchange', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                cache: 'no-store',
+                body: JSON.stringify({ code: code })
+            });
+            if (ex.ok) restored = await ex.json();
+        }
+
+        // Same-origin fallback (local dev, or Render self-serving): hydrate from
+        // the httpOnly session cookie.
+        if (!restored || !restored.token) {
+            if (typeof ensureSession === 'function') restored = await ensureSession();
+        }
         if (!restored || !restored.token) {
             var r = await fetch(API_BASE + '/auth/session', { credentials: 'same-origin', cache: 'no-store' });
             if (r.ok) restored = await r.json();
@@ -193,8 +212,8 @@ async function checkExistingSession() {
         if (typeof ensureSession === 'function') {
             var restored = await ensureSession();
             if (restored && restored.token) {
-                if (typeof redirectAfterLogin === 'function') redirectAfterLogin('home.html');
-                else window.location.href = 'home.html';
+                if (typeof redirectAfterLogin === 'function') redirectAfterLogin('dashboard.html');
+                else window.location.href = 'dashboard.html';
                 return;
             }
         }
@@ -206,8 +225,8 @@ async function checkExistingSession() {
             cache: 'no-store'
         });
         if (response.ok) {
-            if (typeof redirectAfterLogin === 'function') redirectAfterLogin('home.html');
-            else window.location.href = 'home.html';
+            if (typeof redirectAfterLogin === 'function') redirectAfterLogin('dashboard.html');
+            else window.location.href = 'dashboard.html';
         } else {
             clearSession();
         }
@@ -380,9 +399,9 @@ async function handleOAuthUsernameSubmit(e) {
 function finishOAuthLogin() {
     var next = sessionStorage.getItem('oauthNext') || '';
     sessionStorage.removeItem('oauthNext');
-    if (typeof redirectAfterLogin === 'function') redirectAfterLogin('home.html', next);
-    else if (typeof safeNextUrl === 'function') window.location.href = safeNextUrl('home.html', next);
-    else window.location.href = 'home.html';
+    if (typeof redirectAfterLogin === 'function') redirectAfterLogin('dashboard.html', next);
+    else if (typeof safeNextUrl === 'function') window.location.href = safeNextUrl('dashboard.html', next);
+    else window.location.href = 'dashboard.html';
 }
 
 function hideAllViews() {
@@ -528,8 +547,8 @@ async function handleLogin(e) {
             showSuccess(successDiv, 'Login successful! Redirecting...');
 
             setTimeout(function() {
-                if (typeof redirectAfterLogin === 'function') redirectAfterLogin('home.html');
-                else window.location.href = 'home.html';
+                if (typeof redirectAfterLogin === 'function') redirectAfterLogin('dashboard.html');
+                else window.location.href = 'dashboard.html';
             }, 500);
         } else {
             if (data.emailNotVerified && data.email) {
@@ -594,8 +613,8 @@ async function handleRegister(e) {
             localStorage.setItem('authToken', data.token);
             localStorage.setItem('currentUser', JSON.stringify(data.user));
             localStorage.setItem('lastActivity', Date.now().toString());
-            if (typeof redirectAfterLogin === 'function') redirectAfterLogin('home.html');
-            else window.location.href = 'home.html';
+            if (typeof redirectAfterLogin === 'function') redirectAfterLogin('dashboard.html');
+            else window.location.href = 'dashboard.html';
             return;
         } else if (response.ok) {
             showVerificationPending(email);

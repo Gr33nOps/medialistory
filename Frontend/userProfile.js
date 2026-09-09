@@ -178,6 +178,7 @@ async function loadUserProfile() {
         if (r.ok) {
             var d = await r.json();
             displayUserProfile(d.user);
+            renderPersonal(d);
             await checkFollowStatus();
         } else {
             notify('Failed to load user profile.');
@@ -249,7 +250,7 @@ async function loadUserGames() {
             updateUpMediaCounts();
             displayUserGames(sortGames(userGamesCache));
         } else {
-            // Never leave the skeleton spinning — always resolve to a real state.
+            // Never leave the skeleton spinning - always resolve to a real state.
             var msg = r.status === 403 ? 'This collection is private.' : 'Could not load this collection.';
             if (container) container.innerHTML = '<div class="coll-empty-state"><div class="coll-empty-icon">' + msg + '</div><p>Please try again in a moment.</p></div>';
         }
@@ -281,7 +282,13 @@ function updateUpMediaCounts() {
     document.querySelectorAll('#upMediaTabs .media-tab').forEach(function (tab) {
         var k = tab.dataset.media;
         if (tab.querySelector('.mt-count')) tab.querySelector('.mt-count').textContent = counts[k] || 0;
-        else tab.insertAdjacentHTML('beforeend', ' <span class="mt-count">' + (counts[k] || 0) + '</span>');
+        else {
+            tab.appendChild(document.createTextNode(' '));
+            var countSpan = document.createElement('span');
+            countSpan.className = 'mt-count';
+            countSpan.textContent = counts[k] || 0;
+            tab.appendChild(countSpan);
+        }
     });
 }
 
@@ -331,6 +338,7 @@ function renderCollectionRow(game) {
                     '<span class="status-dot-inline" style="background:' + statusColor + ';"></span>' +
                     '<span class="coll-item-status">' + esc(statusText) + '</span>' +
                 '</div>' +
+                (game.notes ? '<div class="coll-note" title="Review or note">' + esc(game.notes) + '</div>' : '') +
             '</div>' +
             '<div class="coll-item-right">' +
                 '<div class="coll-score-badge">' + (game.score ? game.score : '-') + '</div>' +
@@ -688,6 +696,7 @@ function upRenderGameRow(g) {
             '<div class="coll-item-main">' +
                 '<div class="coll-item-name">' + esc(g.name) + '</div>' +
                 '<div class="coll-item-meta">' + statusMetaHtml + '</div>' +
+                (g.note ? '<div class="coll-note" title="Review or note">' + esc(g.note) + '</div>' : '') +
             '</div>' +
             '<div class="coll-item-right"><div class="coll-score-badge">' + score + '</div></div>' +
         '</div>' +
@@ -903,3 +912,328 @@ function logout() {
     }
 }
 window.logout = logout;
+
+/* ── Personal profile sections ─────────────────────────────────────────────
+   Currently into, the Top 10s, Similar Taste, and people who match. All of it is
+   derived from the library, so a private account you do not follow gets none of
+   it: the API sends nulls and every section below stays hidden. */
+
+var PF_PAGE_FOR = { movie: 'movies.html', series: 'series.html', anime: 'anime.html', game: 'home.html' };
+var PF_LABEL    = { movie: 'Movies', series: 'Shows', anime: 'Anime', game: 'Games' };
+var PF_ORDER    = ['movie', 'series', 'anime', 'game'];
+var PF_FALLBACK_IMG = '/img/no-image.svg';
+var pfTop = null;
+var pfActiveTopCat = null;
+
+function pfEsc(v) {
+    return (typeof esc === 'function') ? esc(v) : String(v == null ? '' : v);
+}
+
+function pfOpenHref(mediaType, ref) {
+    return (PF_PAGE_FOR[mediaType] || 'home.html') + '?open=' + encodeURIComponent(ref);
+}
+
+function pfPoster(src, alt) {
+    var url = src || PF_FALLBACK_IMG;
+    return '<img src="' + pfEsc(url) + '" alt="' + pfEsc(alt || '') + '" loading="lazy" data-fallback="1">';
+}
+
+// One delegated handler rather than an inline onerror on every poster, which
+// keeps the markup free of script and works under the page's CSP.
+document.addEventListener('error', function (e) {
+    var img = e.target;
+    if (img && img.tagName === 'IMG' && img.dataset.fallback === '1' && img.src.indexOf(PF_FALLBACK_IMG) === -1) {
+        img.dataset.fallback = '0';
+        img.src = PF_FALLBACK_IMG;
+    }
+}, true);
+
+function renderPersonal(payload) {
+    var user = payload.user || {};
+    // The accent tints this profile's headings and rank numbers, so a page reads
+    // as someone's own without leaving the app's four category colors.
+    var section = document.getElementById('upProfileSection');
+    if (section) section.setAttribute('data-accent', user.accent || 'movie');
+
+    renderBio(user.bio);
+    renderSimilarBadge(payload.similarity, user);
+    renderCurrentlyInto(payload.currentlyInto);
+    renderTopTen(payload.top);
+    renderBanner(user, payload.top, payload.currentlyInto);
+    if (user.canView && !user.isSelf) loadSimilarPeople();
+}
+
+function renderBio(bio) {
+    var el = document.getElementById('upBio');
+    if (!el) return;
+    if (!bio) { el.hidden = true; el.textContent = ''; return; }
+    el.hidden = false;
+    el.textContent = bio;
+}
+
+/* The header is filled with poster art the profile already has rather than a
+   second uploaded image. Nothing extra to store, and it always looks like the
+   person it belongs to. Below four posters it stays a plain accent wash, since a
+   sparse strip looks broken rather than deliberate. */
+function renderBanner(user, top, current) {
+    var el = document.getElementById('upBanner');
+    if (!el) return;
+    if (user.banner_style === 'accent' || !user.canView) { el.className = 'pf-banner'; el.innerHTML = ''; return; }
+
+    var posters = [];
+    PF_ORDER.forEach(function (cat) {
+        ((top && top[cat]) || []).forEach(function (it) { if (it.background_image) posters.push(it.background_image); });
+    });
+    ((current && current.items) || []).forEach(function (it) { if (it.background_image) posters.push(it.background_image); });
+
+    var unique = [];
+    posters.forEach(function (src) { if (unique.indexOf(src) === -1) unique.push(src); });
+    if (unique.length < 4) { el.className = 'pf-banner'; el.innerHTML = ''; return; }
+
+    el.className = 'pf-banner has-art';
+    el.innerHTML = unique.slice(0, 12).map(function (src) { return pfPoster(src, ''); }).join('');
+}
+
+function renderSimilarBadge(similarity, user) {
+    var el = document.getElementById('upSimilar');
+    if (!el) return;
+    if (user.isSelf || !user.canView) { el.hidden = true; el.innerHTML = ''; return; }
+
+    el.hidden = false;
+    if (!similarity) {
+        // Deliberately not a number. Too little between you for one to mean anything.
+        el.innerHTML = '<span class="pf-similar-none">Not enough data yet</span>' +
+            '<span class="pf-similar-note">Rate and rank a few more titles to compare taste.</span>';
+        return;
+    }
+    var bits = [];
+    if (similarity.shared) bits.push(similarity.shared + ' in common');
+    if (similarity.coRated) bits.push(similarity.coRated + ' both rated');
+    if (similarity.topShared) bits.push(similarity.topShared + ' shared Top 10');
+    el.innerHTML =
+        '<span class="pf-similar-pct">' + Number(similarity.percent) + '%</span>' +
+        '<span class="pf-similar-label">Similar taste</span>' +
+        '<button type="button" class="link-btn pf-similar-more" id="upCompareBtn">Compare in detail</button>' +
+        (bits.length ? '<span class="pf-similar-note">' + pfEsc(bits.join(' · ')) + '</span>' : '');
+    wireCompareButton();
+}
+
+function renderCurrentlyInto(current) {
+    var wrap = document.getElementById('upCurrent');
+    var list = document.getElementById('upCurrentList');
+    if (!wrap || !list) return;
+    var items = (current && current.items) || [];
+    if (!items.length) { wrap.hidden = true; list.innerHTML = ''; return; }
+
+    wrap.hidden = false;
+    list.innerHTML = items.map(function (it) {
+        var verb = it.media_type === 'game' ? 'Playing' : 'Watching';
+        var prog = '';
+        if (it.episode_count && it.progress != null) {
+            prog = '<span class="pf-current-prog">Episode ' + Number(it.progress) + ' of ' + Number(it.episode_count) + '</span>';
+        }
+        return '<a class="pf-current-item" data-cat="' + pfEsc(it.media_type) + '" href="' + pfEsc(pfOpenHref(it.media_type, it.game_id)) + '">' +
+            pfPoster(it.background_image, '') +
+            '<span class="pf-current-body">' +
+                '<span class="pf-current-verb">' + verb + '</span>' +
+                '<span class="pf-current-name">' + pfEsc(it.name) + '</span>' +
+                prog +
+            '</span>' +
+        '</a>';
+    }).join('');
+}
+
+function renderTopTen(top) {
+    var wrap = document.getElementById('upTop');
+    var tabs = document.getElementById('upTopTabs');
+    var list = document.getElementById('upTopList');
+    if (!wrap || !tabs || !list) return;
+    pfTop = top || null;
+
+    var filled = PF_ORDER.filter(function (c) { return pfTop && pfTop[c] && pfTop[c].length; });
+    if (!filled.length) { wrap.hidden = true; return; }
+
+    wrap.hidden = false;
+    if (!pfActiveTopCat || filled.indexOf(pfActiveTopCat) === -1) pfActiveTopCat = filled[0];
+
+    // Only worth a category switcher when there is more than one list to switch to.
+    tabs.hidden = filled.length < 2;
+    tabs.innerHTML = filled.length < 2 ? '' : filled.map(function (cat) {
+        var on = cat === pfActiveTopCat;
+        return '<button type="button" role="tab" class="pf-chip' + (on ? ' active' : '') + '" data-cat="' + cat + '"' +
+            ' aria-selected="' + on + '">' + PF_LABEL[cat] + '</button>';
+    }).join('');
+    tabs.querySelectorAll('.pf-chip').forEach(function (b) {
+        b.addEventListener('click', function () { pfActiveTopCat = b.dataset.cat; renderTopTen(pfTop); });
+    });
+
+    list.setAttribute('data-cat', pfActiveTopCat);
+    var items = pfTop[pfActiveTopCat] || [];
+    list.innerHTML = items.map(function (it) {
+        return '<li class="pf-top-item">' +
+            '<a href="' + pfEsc(pfOpenHref(pfActiveTopCat, it.game_id)) + '" title="' + pfEsc(it.name) + '">' +
+                '<span class="pf-top-rank">' + Number(it.position) + '</span>' +
+                pfPoster(it.background_image, it.name) +
+                '<span class="pf-top-name">' + pfEsc(it.name) + '</span>' +
+            '</a>' +
+        '</li>';
+    }).join('');
+}
+
+async function loadSimilarPeople() {
+    var wrap = document.getElementById('upSimilarPeople');
+    var list = document.getElementById('upSimilarPeopleList');
+    if (!wrap || !list) return;
+    try {
+        var r = await fetch(API_BASE + '/discover/similar?limit=6', {
+            headers: { Authorization: 'Bearer ' + authToken }
+        });
+        if (!r.ok) return;
+        var d = await r.json();
+        // The person whose page this is does not belong in their own suggestions.
+        var people = (d.users || []).filter(function (u) { return String(u.id) !== String(viewingUserId); });
+        if (!people.length) return;
+
+        wrap.hidden = false;
+        list.innerHTML = people.map(function (u) {
+            var name = u.display_name || u.username;
+            var avatar = u.avatar_url ||
+                'https://ui-avatars.com/api/?name=' + encodeURIComponent(name) + '&size=96&background=475569&color=fff&bold=true';
+            return '<a class="pf-person" href="userProfile.html?userId=' + encodeURIComponent(u.id) + '">' +
+                '<img src="' + pfEsc(avatar) + '" alt="" loading="lazy">' +
+                '<span class="pf-person-name">' + pfEsc(name) + '</span>' +
+                '<span class="pf-person-pct">' + Number(u.similarity.percent) + '%</span>' +
+            '</a>';
+        }).join('');
+    } catch (_) { /* discovery is a bonus: if it fails the section simply stays off */ }
+}
+
+/* ── Compare profiles ──────────────────────────────────────────────────────
+   The headline percentage says how alike two people are. This says where: the
+   titles you both rate highly, the ones you disagree most about, what you both
+   ranked, and the same score per category, since matching on films says nothing
+   about games. Fetched only when asked for, because most visits never open it. */
+
+var pfCompareLoaded = false;
+
+function wireCompareButton() {
+    var btn = document.getElementById('upCompareBtn');
+    if (!btn || btn.dataset.wired) return;
+    btn.dataset.wired = '1';
+    btn.addEventListener('click', function () {
+        var section = document.getElementById('upCompare');
+        if (!section) return;
+        if (pfCompareLoaded) {
+            section.hidden = !section.hidden;
+            btn.textContent = section.hidden ? 'Compare in detail' : 'Hide comparison';
+            if (!section.hidden) section.scrollIntoView({ block: 'start', behavior: 'smooth' });
+            return;
+        }
+        loadCompare();
+    });
+}
+
+async function loadCompare() {
+    var section = document.getElementById('upCompare');
+    var body = document.getElementById('upCompareBody');
+    var btn = document.getElementById('upCompareBtn');
+    if (!section || !body) return;
+
+    section.hidden = false;
+    body.innerHTML = '<p class="pf-empty">Working it out...</p>';
+    if (btn) { btn.disabled = true; btn.textContent = 'Comparing...'; }
+
+    try {
+        var r = await fetch(API_BASE + '/users/' + encodeURIComponent(viewingUserId) + '/compare', {
+            headers: { Authorization: 'Bearer ' + authToken }
+        });
+        var d = await r.json().catch(function () { return {}; });
+        if (!r.ok) {
+            body.innerHTML = '<p class="pf-empty">' + pfEsc(d.error || 'Could not compare right now.') + '</p>';
+        } else {
+            renderCompare(d);
+            pfCompareLoaded = true;
+        }
+    } catch (_) {
+        body.innerHTML = '<p class="pf-empty">Could not reach the server.</p>';
+    }
+    if (btn) { btn.disabled = false; btn.textContent = 'Hide comparison'; }
+}
+
+function compareTitleRow(item, right) {
+    var href = pfOpenHref(item.media_type, item.media_ref);
+    return '<a class="pf-cmp-row" href="' + pfEsc(href) + '" data-cat="' + pfEsc(item.media_type) + '">' +
+        pfPoster(item.background_image, '') +
+        '<span class="pf-cmp-name">' + pfEsc(item.name) + '</span>' +
+        right +
+    '</a>';
+}
+
+function renderCompare(d) {
+    var body = document.getElementById('upCompareBody');
+    var them = (d.user && (d.user.display_name || d.user.username)) || 'them';
+    var parts = [];
+
+    // Per category. A category with too little behind it says so rather than
+    // showing a number, exactly like the headline figure does.
+    var cats = [['movie', 'Movies'], ['series', 'Shows'], ['anime', 'Anime'], ['game', 'Games']];
+    var catRows = cats.map(function (c) {
+        var s = (d.categories || {})[c[0]] || {};
+        var pct = s.percent;
+        var bar = pct == null
+            ? '<span class="pf-cmp-bar"><span style="width:0"></span></span>'
+            : '<span class="pf-cmp-bar"><span style="width:' + Number(pct) + '%"></span></span>';
+        var value = pct == null
+            ? '<span class="pf-cmp-nodata">Not enough shared</span>'
+            : '<span class="pf-cmp-pct">' + Number(pct) + '%</span>';
+        return '<div class="pf-cmp-cat" data-cat="' + c[0] + '">' +
+            '<span class="pf-cmp-cat-name">' + c[1] + '</span>' + bar + value +
+        '</div>';
+    }).join('');
+    parts.push('<div class="pf-cmp-cats">' + catRows + '</div>');
+
+    var counts = d.counts || {};
+    parts.push('<p class="pf-hint pf-cmp-counts">' +
+        Number(counts.shared || 0) + ' titles in both libraries, ' +
+        Number(counts.coRated || 0) + ' rated by both of you.</p>');
+
+    if ((d.commonTop || []).length) {
+        parts.push('<h3 class="pf-cmp-h">Both of you ranked these</h3>');
+        parts.push('<div class="pf-cmp-list">' + d.commonTop.map(function (it) {
+            return compareTitleRow(it, '<span class="pf-cmp-ranks">' +
+                '<span title="Your rank">#' + Number(it.yourPosition) + '</span>' +
+                '<span class="pf-cmp-vs">vs</span>' +
+                '<span title="Their rank">#' + Number(it.theirPosition) + '</span>' +
+            '</span>');
+        }).join('') + '</div>');
+    }
+
+    if ((d.favourites || []).length) {
+        parts.push('<h3 class="pf-cmp-h">You both rate these highly</h3>');
+        parts.push('<div class="pf-cmp-list">' + d.favourites.map(function (it) {
+            return compareTitleRow(it, '<span class="pf-cmp-scores">' +
+                '<span class="pf-cmp-you">' + Number(it.yourScore) + '</span>' +
+                '<span class="pf-cmp-vs">vs</span>' +
+                '<span class="pf-cmp-them">' + Number(it.theirScore) + '</span>' +
+            '</span>');
+        }).join('') + '</div>');
+    }
+
+    if ((d.disagreements || []).length) {
+        parts.push('<h3 class="pf-cmp-h">You disagree most about these</h3>');
+        parts.push('<div class="pf-cmp-list">' + d.disagreements.map(function (it) {
+            return compareTitleRow(it, '<span class="pf-cmp-scores is-apart">' +
+                '<span class="pf-cmp-you">' + Number(it.yourScore) + '</span>' +
+                '<span class="pf-cmp-vs">vs</span>' +
+                '<span class="pf-cmp-them">' + Number(it.theirScore) + '</span>' +
+            '</span>');
+        }).join('') + '</div>');
+    }
+
+    if (!(d.commonTop || []).length && !(d.favourites || []).length && !(d.disagreements || []).length) {
+        parts.push('<p class="pf-empty">Nothing you have both rated yet. Score a few of the titles you share with ' +
+            pfEsc(them) + ' and this fills in.</p>');
+    }
+
+    body.innerHTML = parts.join('');
+}

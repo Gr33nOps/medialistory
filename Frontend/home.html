@@ -15,20 +15,20 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="mask-icon" href="/favicon.svg" color="#3b82f6">
     <meta name="theme-color" content="#0b1220">
-    <link rel="canonical" href="https://medialistory.onrender.com/">
+    <link rel="canonical" href="https://medialistory.vercel.app/">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="MediaListory">
     <meta property="og:title" content="Games - MediaListory">
     <meta property="og:description" content="Browse and track games on MediaListory. Rate them, take notes, and keep one library for your movies, shows, anime, and games.">
-    <meta property="og:url" content="https://medialistory.onrender.com/">
-    <meta property="og:image" content="https://medialistory.onrender.com/img/og-card.jpg">
+    <meta property="og:url" content="https://medialistory.vercel.app/">
+    <meta property="og:image" content="https://medialistory.vercel.app/img/og-card.jpg">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:image:type" content="image/jpeg">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Games - MediaListory">
     <meta name="twitter:description" content="Browse and track games on MediaListory. Rate them, take notes, and keep one library for your movies, shows, anime, and games.">
-    <meta name="twitter:image" content="https://medialistory.onrender.com/img/og-card.jpg">
+    <meta name="twitter:image" content="https://medialistory.vercel.app/img/og-card.jpg">
     <!-- seo:end -->
 </head>
 <body>
@@ -47,6 +47,7 @@
                 <label class="sr-only" for="sortBy">Sort games</label>
                 <select id="sortBy" class="filter-select" aria-label="Sort games">
                     <option value="popularity-desc" selected>Popularity</option>
+                    <option value="rating-desc">Top Rated</option>
                     <option value="release-desc">Newest</option>
                     <option value="release-asc">Oldest</option>
                     <option value="name-asc">Name (A-Z)</option>
@@ -59,17 +60,24 @@
 
         <div id="filterSection" class="filter-section hidden">
             <div class="filter-group">
-                <select id="genre" class="filter-select">
+                <select id="genre" class="filter-select" aria-label="Filter by genre">
                     <option value="">All Genres</option>
                 </select>
-                <select id="platform" class="filter-select">
+                <select id="platform" class="filter-select" aria-label="Filter by platform">
                     <option value="">All Platforms</option>
                 </select>
-                <select id="publisher" class="filter-select">
-                    <option value="">All Publishers</option>
+                <select id="gameMode" class="filter-select" aria-label="Filter by game mode">
+                    <option value="">All Modes</option>
                 </select>
-                <select id="developer" class="filter-select">
-                    <option value="">All Developers</option>
+                <select id="year" class="filter-select" aria-label="Filter by release year">
+                    <option value="">Any year</option>
+                </select>
+                <select id="minRating" class="filter-select" aria-label="Filter by minimum rating">
+                    <option value="">Any rating</option>
+                    <option value="90">90+</option>
+                    <option value="80">80+</option>
+                    <option value="70">70+</option>
+                    <option value="60">60+</option>
                 </select>
             </div>
             <div class="filter-actions">
@@ -122,7 +130,7 @@
                 <div class="footer-col">
                     <h4>Navigate</h4>
                     <ul>
-                        <li><a href="myGameList.html">My Collection</a></li>
+                        <li><a href="library.html">My Collection</a></li>
                         <li><a href="profile.html">My Profile</a></li>
                         <li><a href="about.html">About</a></li>
                     </ul>

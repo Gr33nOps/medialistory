@@ -1,19 +1,32 @@
 const express = require('express');
+const taste = require('./taste');
+const avatars = require('./avatars');
 const { clientError } = require('./errors');
 
 module.exports = (db, verifyToken, checkBanned) => {
   const router = express.Router();
 
-  async function getPublicUser(userId) {
+  const CURRENT_LIMIT = 6;
+
+  // Unauthenticated on purpose: <img> cannot send a bearer token. See avatars.js.
+  router.get('/:userId/avatar', avatars.handler(db));
+
+  async function getPublicUser(userId, req) {
     try {
-      const dbUser = await db('users').where({ id: userId }).first();
+      const dbUser = await db('users').where({ id: userId })
+        .select('id', 'username', 'display_name', 'bio', 'accent', 'banner_style',
+                'is_private', 'is_banned', 'created_at', ...avatars.columns(db, 'users'))
+        .first();
       if (!dbUser) return null;
       if (dbUser.is_banned) return null;
       return {
         id:           dbUser.id,
         username:     dbUser.username     || 'unknown',
         display_name: dbUser.display_name || dbUser.username || '',
-        avatar_url:   dbUser.avatar_url   || null,
+        avatar_url:   req ? avatars.urlFor(req, dbUser) : null,
+        bio:          dbUser.bio          || '',
+        accent:       dbUser.accent       || null,
+        banner_style: dbUser.banner_style || 'posters',
         is_private:   !!dbUser.is_private,
         created_at:   dbUser.created_at
       };
@@ -22,11 +35,68 @@ module.exports = (db, verifyToken, checkBanned) => {
     }
   }
 
+  // A user's Top 10s, grouped by category and already in rank order.
+  async function getTopMedia(userId) {
+    const rows = await db('user_top_media')
+      .join('games as g', 'g.id', 'user_top_media.game_id')
+      .where('user_top_media.user_id', userId)
+      .orderBy('user_top_media.position')
+      .select('user_top_media.media_type', 'user_top_media.position',
+              'g.game_id', 'g.name', 'g.background_image', 'g.released');
+    const out = { movie: [], series: [], anime: [], game: [] };
+    for (const r of rows) {
+      if (!out[r.media_type]) continue;
+      out[r.media_type].push({
+        position: Number(r.position), game_id: r.game_id,
+        name: r.name, background_image: r.background_image, released: r.released
+      });
+    }
+    return out;
+  }
+
+  /* What someone is currently into. Pinned titles win; with nothing pinned this
+     falls back to whatever they have most recently touched, so the section is
+     worth reading before anybody configures it. */
+  async function getCurrentlyInto(userId) {
+    const base = () => db('user_game_lists as ugl')
+      .join('games as g', 'g.id', 'ugl.game_id')
+      .where('ugl.user_id', userId)
+      .where('ugl.status', 'playing')
+      .select('g.game_id', 'g.name', 'g.background_image', 'g.media_type',
+              'g.episode_count', 'ugl.progress', 'ugl.updated_at');
+
+    const pinned = await base().where('ugl.show_on_profile', true)
+      .orderBy('ugl.updated_at', 'desc').limit(CURRENT_LIMIT);
+    if (pinned.length) return { items: pinned, pinned: true };
+
+    const recent = await base().orderBy('ugl.updated_at', 'desc').limit(CURRENT_LIMIT);
+    return { items: recent, pinned: false };
+  }
+
+  /* One pairwise Similar Taste score, cached briefly. The key is order
+     independent because the score is symmetric, so two people looking at each
+     other share the entry. */
+  async function scoreAgainstViewer(viewerId, targetId) {
+    if (!viewerId || !targetId || viewerId === targetId) return null;
+    const key = 'pair:' + [String(viewerId), String(targetId)].sort().join(':');
+    const cached = taste.cacheGet(key);
+    if (cached !== undefined) return cached;
+
+    const profiles = await taste.loadProfiles(db, [viewerId, targetId]);
+    const result = taste.similarity(
+      profiles.get(String(viewerId)) || { items: [], top: {}, genres: {} },
+      profiles.get(String(targetId)) || { items: [], top: {}, genres: {} }
+    );
+    const value = result ? { percent: result.percent, shared: result.shared, coRated: result.coRated, topShared: result.topShared } : null;
+    taste.cacheSet(key, value);
+    return value;
+  }
+
   router.get('/:userId', verifyToken, checkBanned, async (req, res) => {
     try {
       const userId = req.params.userId;
 
-      const user = await getPublicUser(userId);
+      const user = await getPublicUser(userId, req);
       if (!user) return res.status(404).json({ error: 'User not found' });
 
       const isSelf = req.userId === userId;
@@ -54,6 +124,16 @@ module.exports = (db, verifyToken, checkBanned) => {
         mediaBreakdown[key] += parseInt(r.count) || 0;
       });
 
+      // A private library stays private: no Top 10, nothing currently into, and
+      // no similarity score, since all three are derived from what they track.
+      const [top, current, similar] = canView
+        ? await Promise.all([
+            getTopMedia(userId),
+            getCurrentlyInto(userId),
+            isSelf ? Promise.resolve(null) : scoreAgainstViewer(req.userId, userId)
+          ])
+        : [null, null, null];
+
       res.json({
         user: {
           ...user,
@@ -65,10 +145,124 @@ module.exports = (db, verifyToken, checkBanned) => {
           mediaBreakdown: canView ? mediaBreakdown : { game: 0, movie: 0, series: 0, anime: 0 },
           followersCount: parseInt(followers?.count) || 0,
           followingCount: parseInt(following?.count) || 0
-        }
+        },
+        top,
+        currentlyInto: current,
+        // null means "not enough data yet" rather than a number nobody can trust.
+        similarity: similar
       });
     } catch (error) {
       console.error('Get user profile error:', error);
+      return clientError(res, 400, 'Request failed', error);
+    }
+  });
+
+  /* Compare two libraries in detail.
+
+     The headline percentage answers "how alike are we". This answers "where",
+     which is the part worth reading: the titles you both rate highly, the ones
+     you disagree most about, what you both put in a Top 10, and the same score
+     computed per category, since two people can match on films and share nothing
+     at all on games. Loaded on demand rather than with the profile, because most
+     visits never open it. */
+  const CATEGORIES = ['movie', 'series', 'anime', 'game'];
+  const COMPARE_LIST_MAX = 12;
+  const AGREE_WITHIN = 1;   // scores this close count as agreeing
+  const DISAGREE_FROM = 3;  // ...and this far apart count as a disagreement
+
+  router.get('/:userId/compare', verifyToken, checkBanned, async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      if (userId === req.userId) return res.status(400).json({ error: 'Nothing to compare against yourself.' });
+
+      const user = await getPublicUser(userId, req);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      const isFollowing = await db('user_follows')
+        .where({ follower_id: req.userId, following_id: userId }).first();
+      if (user.is_private && !isFollowing) {
+        return res.status(403).json({ error: 'This account is private.' });
+      }
+
+      const profiles = await taste.loadProfiles(db, [req.userId, userId]);
+      const mine = profiles.get(String(req.userId));
+      const theirs = profiles.get(String(userId));
+      if (!mine || !theirs) return res.status(404).json({ error: 'User not found' });
+
+      const overall = taste.similarity(mine, theirs);
+      const categories = {};
+      for (const cat of CATEGORIES) {
+        const a = taste.forMediaType(mine, cat);
+        const b = taste.forMediaType(theirs, cat);
+        const s = taste.similarity(a, b);
+        categories[cat] = s
+          ? { percent: s.percent, shared: s.shared, coRated: s.coRated, topShared: s.topShared }
+          : { percent: null, shared: 0, coRated: 0, topShared: 0, mine: a.items.length, theirs: b.items.length };
+      }
+
+      // Walk the shared titles once, keeping the numbers needed for every list.
+      const theirsById = new Map(theirs.items.map(it => [String(it.game_id), it]));
+      const shared = [];
+      for (const it of mine.items) {
+        const other = theirsById.get(String(it.game_id));
+        if (!other) continue;
+        shared.push({
+          game_id: it.game_id,
+          media_type: it.media_type,
+          yourScore: it.score,
+          theirScore: other.score,
+          diff: (it.score != null && other.score != null) ? Math.abs(it.score - other.score) : null
+        });
+      }
+
+      const rated = shared.filter(s => s.diff != null);
+      const favourites = rated
+        .filter(s => s.diff <= AGREE_WITHIN)
+        .sort((a, b) => (b.yourScore + b.theirScore) - (a.yourScore + a.theirScore))
+        .slice(0, COMPARE_LIST_MAX);
+      const disagreements = rated
+        .filter(s => s.diff >= DISAGREE_FROM)
+        .sort((a, b) => b.diff - a.diff)
+        .slice(0, COMPARE_LIST_MAX);
+
+      // Titles both of us ranked, most highly ranked first.
+      const commonTop = [];
+      for (const key of Object.keys(mine.top || {})) {
+        if (theirs.top?.[key] == null) continue;
+        commonTop.push({
+          game_id: Number(key),
+          media_type: (mine.topTypes || {})[key] || 'game',
+          yourPosition: mine.top[key],
+          theirPosition: theirs.top[key]
+        });
+      }
+      commonTop.sort((a, b) => (a.yourPosition + a.theirPosition) - (b.yourPosition + b.theirPosition));
+
+      // One lookup for every title any of the lists will show.
+      const needed = [...new Set([...favourites, ...disagreements, ...commonTop].map(x => x.game_id))];
+      const media = needed.length
+        ? await db('games').whereIn('id', needed)
+            .select('id', 'game_id as media_ref', 'name', 'background_image', 'media_type')
+        : [];
+      const byId = new Map(media.map(m => [String(m.id), m]));
+      const decorate = (rows) => rows.map(r => {
+        const m = byId.get(String(r.game_id));
+        return m ? { ...r, name: m.name, media_ref: m.media_ref, background_image: m.background_image } : null;
+      }).filter(Boolean);
+
+      res.json({
+        user: { id: user.id, username: user.username, display_name: user.display_name, accent: user.accent },
+        overall: overall
+          ? { percent: overall.percent, shared: overall.shared, coRated: overall.coRated, topShared: overall.topShared }
+          : null,
+        categories,
+        counts: { shared: shared.length, coRated: rated.length, yours: mine.items.length, theirs: theirs.items.length },
+        favourites: decorate(favourites),
+        disagreements: decorate(disagreements),
+        commonTop: decorate(commonTop).slice(0, COMPARE_LIST_MAX)
+      });
+    } catch (error) {
+      console.error('Compare profiles error:', error);
       return clientError(res, 400, 'Request failed', error);
     }
   });
@@ -77,7 +271,7 @@ module.exports = (db, verifyToken, checkBanned) => {
     try {
       const userId = req.params.userId;
 
-      const user = await getPublicUser(userId);
+      const user = await getPublicUser(userId, req);
       if (!user) return res.status(404).json({ error: 'User not found' });
 
       // Private libraries are only visible to the owner and accepted followers.
@@ -105,6 +299,7 @@ module.exports = (db, verifyToken, checkBanned) => {
           'games.playtime',
           'user_game_lists.status',
           'user_game_lists.score',
+          'user_game_lists.notes',
           'user_game_lists.progress_hours',
           'user_game_lists.created_at as date_added',
           'user_game_lists.updated_at'
@@ -121,7 +316,7 @@ module.exports = (db, verifyToken, checkBanned) => {
   router.get('/:userId/followers', verifyToken, checkBanned, async (req, res) => {
     try {
       const userId = req.params.userId;
-      const user = await getPublicUser(userId);
+      const user = await getPublicUser(userId, req);
       if (!user) return res.status(404).json({ error: 'User not found' });
 
       const rows = await db('user_follows')
@@ -143,7 +338,7 @@ module.exports = (db, verifyToken, checkBanned) => {
   router.get('/:userId/following', verifyToken, checkBanned, async (req, res) => {
     try {
       const userId = req.params.userId;
-      const user = await getPublicUser(userId);
+      const user = await getPublicUser(userId, req);
       if (!user) return res.status(404).json({ error: 'User not found' });
 
       const rows = await db('user_follows')
@@ -165,7 +360,7 @@ module.exports = (db, verifyToken, checkBanned) => {
   router.get('/:userId/lists', verifyToken, checkBanned, async (req, res) => {
     try {
       const userId = req.params.userId;
-      const user = await getPublicUser(userId);
+      const user = await getPublicUser(userId, req);
       if (!user) return res.status(404).json({ error: 'User not found' });
 
       if (user.is_private && req.userId !== userId) {
@@ -203,7 +398,7 @@ module.exports = (db, verifyToken, checkBanned) => {
       const userId = req.params.userId;
       const listId = parseInt(req.params.listId);
 
-      const user = await getPublicUser(userId);
+      const user = await getPublicUser(userId, req);
       if (!user) return res.status(404).json({ error: 'User not found' });
 
       const list = await db('custom_lists')

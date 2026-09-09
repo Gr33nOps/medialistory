@@ -1,10 +1,25 @@
 const express = require('express');
+const taste = require('./taste');
 const { clientError } = require('./errors');
 const { parseIgdbClientId, slugify } = require('./igdbUtils');
 const { parseMediaRef, externalRef, isValidMediaType, providerFor } = require('./tmdbUtils');
 
 module.exports = (db, verifyToken, checkBanned) => {
   const router = express.Router();
+
+  // Adding, rating, or removing a title changes what Similar Taste is computed
+  // from, so drop this user's cached scores once the write has actually
+  // succeeded. Doing it here rather than in each handler means a new write
+  // endpoint cannot forget to. Other people's cached lists are left to expire on
+  // their own: one rating rarely reorders somebody else's suggestions, and the
+  // TTL is short.
+  router.use((req, res, next) => {
+    if (req.method === 'GET' || req.method === 'HEAD') return next();
+    res.on('finish', () => {
+      if (res.statusCode < 400 && req.userId) taste.invalidate(req.userId);
+    });
+    next();
+  });
 
   function generateSlug(name) {
     return slugify(name);
@@ -16,6 +31,14 @@ module.exports = (db, verifyToken, checkBanned) => {
       try { return JSON.parse(value || '[]'); } catch (_) { return []; }
     }
     return value || [];
+  }
+
+  // Optional per-item review/note: trim and cap length; empty becomes null.
+  const NOTE_MAX = 2000;
+  function cleanNote(value) {
+    if (value == null) return null;
+    const t = String(value).trim().slice(0, NOTE_MAX);
+    return t.length ? t : null;
   }
 
   // Resolve the media identity from an add/list payload. Supports games (IGDB),
@@ -139,7 +162,7 @@ module.exports = (db, verifyToken, checkBanned) => {
 
   router.post('/games', verifyToken, checkBanned, async (req, res) => {
     try {
-      const { game_id, game_data, status, score } = req.body;
+      const { game_id, game_data, status, score, notes } = req.body;
       let dbGameId;
 
       if (game_data) {
@@ -159,7 +182,8 @@ module.exports = (db, verifyToken, checkBanned) => {
         user_id: req.userId,
         game_id: dbGameId,
         status:  status || 'plan_to_play',
-        score:   score  || null
+        score:   score  || null,
+        notes:   cleanNote(notes)
       });
 
       res.status(201).json({ message: 'Game added successfully', game_id: dbGameId });
@@ -235,7 +259,7 @@ module.exports = (db, verifyToken, checkBanned) => {
 
   router.put('/games/:gameId', verifyToken, checkBanned, async (req, res) => {
     try {
-      const { status, score, progress } = req.body;
+      const { status, score, progress, notes } = req.body;
       const userGame = await db('user_game_lists')
         .where({ user_id: req.userId, game_id: req.params.gameId })
         .first();
@@ -246,6 +270,7 @@ module.exports = (db, verifyToken, checkBanned) => {
         score:      score  !== undefined ? score  : userGame.score,
         updated_at: db.fn.now()
       };
+      if (notes !== undefined) update.notes = cleanNote(notes);
       // Episode/step progress (series/anime). Clamp to >= 0.
       if (progress !== undefined) {
         const p = parseInt(progress, 10);
@@ -520,7 +545,7 @@ module.exports = (db, verifyToken, checkBanned) => {
         list_id:  list.id,
         game_id:  dbGameId,
         user_id:  req.userId,
-        note:     note   ? note.trim() : null,
+        note:     cleanNote(note),
         position,
         status:   status || null,
         score:    score  || null
@@ -552,7 +577,7 @@ module.exports = (db, verifyToken, checkBanned) => {
       }
 
       const updateData = {};
-      if (note   !== undefined) updateData.note   = note   ? note.trim() : null;
+      if (note   !== undefined) updateData.note   = cleanNote(note);
       if (status !== undefined) updateData.status = status || null;
       if (score  !== undefined) updateData.score  = score  || null;
 

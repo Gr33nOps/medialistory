@@ -2,7 +2,7 @@ const express = require('express');
 const fetch = require('node-fetch');
 const crypto = require('crypto');
 const { createTtlCache } = require('./cache');
-const { sanitizeToken, clampInt } = require('./igdbUtils');
+const { sanitizeToken, clampInt, rankSearchResults } = require('./igdbUtils');
 const {
   tmdbEndpointFor,
   normalizeTmdb,
@@ -14,17 +14,17 @@ const TMDB_BASE = 'https://api.themoviedb.org/3';
 const ALLOWED_SORT = {
   release: 'primary_release_date',
   rating: 'vote_average',
-  name: 'original_title',
+  name: 'title',
   popularity: 'popularity',
   coming: 'primary_release_date'
 };
 
-// TV uses first_air_date instead of primary_release_date.
+// TV uses first_air_date / name instead of primary_release_date / title.
 function sortFieldFor(mediaType, sortKey) {
   const base = ALLOWED_SORT[sortKey] || ALLOWED_SORT.release;
   if (mediaType === 'series') {
     if (base === 'primary_release_date') return 'first_air_date';
-    if (base === 'original_title') return 'name';
+    if (base === 'title') return 'name';
   }
   return base;
 }
@@ -34,6 +34,19 @@ const TTL = {
   list: 3 * 60 * 1000,
   detail: 30 * 60 * 1000
 };
+
+// Anime has its own category (Kitsu), so it must never appear under Shows.
+// TMDB's "anime" keyword covers it on /discover; /search takes no keyword
+// params, so Japanese animation is also screened out by genre + language.
+const TMDB_ANIME_KEYWORD = '210024';
+const ANIMATION_GENRE_ID = 16;
+function isJapaneseAnimation(item) {
+  if (!item || item.original_language !== 'ja') return false;
+  const ids = Array.isArray(item.genre_ids)
+    ? item.genre_ids
+    : (Array.isArray(item.genres) ? item.genres.map((g) => g && g.id) : []);
+  return ids.indexOf(ANIMATION_GENRE_ID) !== -1;
+}
 
 module.exports = (verifyToken, checkBanned, db) => {
   const router = express.Router();
@@ -123,6 +136,13 @@ module.exports = (verifyToken, checkBanned, db) => {
     return maps;
   }
 
+  // Runtime buckets -> with_runtime.gte / .lte (minutes). Server-side on discover.
+  const RUNTIME_BUCKETS = {
+    short:  { lte: 90 },              // under 1h30
+    medium: { gte: 90, lte: 120 },    // 1h30 - 2h
+    long:   { gte: 120 }              // over 2h
+  };
+
   function buildDiscoverParams(mediaType, body, genreNameToId) {
     const limit = clampInt(body.limit, 1, 50, 20); // TMDB pages are 20 items.
     const offset = clampInt(body.offset, 0, 5000, 0);
@@ -141,22 +161,91 @@ module.exports = (verifyToken, checkBanned, db) => {
     const dateField = mediaType === 'series' ? 'first_air_date' : 'primary_release_date';
     const today = new Date().toISOString().slice(0, 10);
 
+    const isSeries = mediaType === 'series';
+    // Shows never include anime; that lives in its own Kitsu-backed category.
+    if (isSeries) params.without_keywords = TMDB_ANIME_KEYWORD;
+    // When the user has already narrowed things down, the strict quality floors
+    // below would often leave an empty page, so they relax. Unfiltered browsing
+    // keeps the strict floors that make each sort read well.
+    const narrowed = !!(body.genre || body.year || body.language || body.runtime ||
+      body.minRating || (isSeries && (body.status != null || body.type != null)));
+
     if (comingSoon) {
-      params.sort_by = `${dateField}.asc`;
-      params[`${dateField}.gte`] = today;
+      // Strictly in the future (today's releases are already out), ordered by
+      // anticipation rather than date so the list leads with titles people are
+      // actually waiting for instead of every obscure same-day release.
+      const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+      params.sort_by = 'popularity.desc';
+      params[`${dateField}.gte`] = tomorrow;
+      if (!isSeries) {
+        params.with_release_type = '2|3'; // limited + wide theatrical
+        params.region = 'US';
+      }
     } else {
       let field = sortFieldFor(mediaType, sortKey);
       let order = sortOrder;
       if (sortKey === 'popularity') { field = 'popularity'; order = 'desc'; }
       params.sort_by = `${field}.${order}`;
       params[`${dateField}.lte`] = today;
-      if (sortKey === 'popularity') params['vote_count.gte'] = '50';
+
+      // Vote floors keep each sort meaningful. Without them TMDB happily returns
+      // titles with a couple of votes and no artwork.
+      if (sortKey === 'popularity') {
+        params['vote_count.gte'] = '50';
+      } else if (sortKey === 'rating') {
+        // Needs to be high: at a few hundred votes a handful of obscure recent
+        // titles sit on a perfect average and outrank the actual classics.
+        params['vote_count.gte'] = narrowed ? (isSeries ? '100' : '300') : (isSeries ? '1000' : '3000');
+      } else if (sortKey === 'release' && order === 'desc') {
+        // "Newest" otherwise lists every unknown title released today.
+        params['vote_count.gte'] = '20';
+      } else if (sortKey === 'name') {
+        // TMDB always orders by the ORIGINAL title while the cards show the
+        // localized one, so a mixed-script catalogue looks unsorted (a Z-A page
+        // opening on "On the Wire" whose original title is CJK). Limiting to
+        // English-original titles makes the ordering match what is displayed.
+        // An explicit Language filter below overrides this default.
+        params['vote_count.gte'] = narrowed ? (isSeries ? '50' : '200') : (isSeries ? '200' : '1000');
+        params.with_original_language = 'en';
+      }
     }
 
     const genre = sanitizeToken(body.genre, 60);
     if (genre && genreNameToId) {
       const id = genreNameToId[genre.toLowerCase()];
       if (id) params.with_genres = String(id);
+    }
+
+    // ── Advanced filters (discover-only; TMDB /search ignores these) ──────────
+    const year = clampInt(body.year, 1874, new Date().getFullYear() + 10, 0);
+    if (year) {
+      params[mediaType === 'series' ? 'first_air_date_year' : 'primary_release_year'] = String(year);
+    }
+
+    const minRating = Number(body.minRating);
+    if (!Number.isNaN(minRating) && minRating > 0 && minRating <= 10) {
+      params['vote_average.gte'] = String(minRating);
+      // Keep a floor of votes so the rating threshold is meaningful.
+      if (!params['vote_count.gte']) params['vote_count.gte'] = '50';
+    }
+
+    // ISO 639-1 language code (letters only, e.g. "en", "ja").
+    const language = sanitizeToken(body.language, 12).replace(/[^a-zA-Z-]/g, '');
+    if (language) params.with_original_language = language;
+
+    // Runtime buckets (movies only - TV runtime is per-episode and misleading).
+    if (mediaType === 'movie' && RUNTIME_BUCKETS[body.runtime]) {
+      const b = RUNTIME_BUCKETS[body.runtime];
+      if (b.gte != null) params['with_runtime.gte'] = String(b.gte);
+      if (b.lte != null) params['with_runtime.lte'] = String(b.lte);
+    }
+
+    // Series-only: with_status (0-5) and with_type (0-6).
+    if (mediaType === 'series') {
+      const status = clampInt(body.status, 0, 5, -1);
+      if (status >= 0) params.with_status = String(status);
+      const type = clampInt(body.type, 0, 6, -1);
+      if (type >= 0) params.with_type = String(type);
     }
 
     return { params, limit };
@@ -355,9 +444,19 @@ module.exports = (verifyToken, checkBanned, db) => {
         return res.status(502).json({ error: 'TMDB API error' });
       }
 
-      const normalized = window.results
+      // Safety net for anime that slipped past the keyword filter, and for the
+      // search endpoint, which accepts no keyword parameters at all.
+      const rows = mediaType === 'series'
+        ? window.results.filter((item) => !isJapaneseAnimation(item))
+        : window.results;
+
+      let normalized = rows
         .map((item) => normalizeTmdb(mediaType, item, maps.byId))
         .filter(Boolean);
+
+      // TMDB search already tolerates typos and ranks by relevance; this only
+      // lifts exact / prefix title matches above near-matches (no results dropped).
+      if (search) normalized = rankSearchResults(normalized, search, (m) => m && m.name);
 
       cache.set(cacheKey, normalized, TTL.list);
       persistMedia(normalized).catch(() => {});
@@ -385,6 +484,33 @@ module.exports = (verifyToken, checkBanned, db) => {
       res.json(maps.list);
     } catch (error) {
       sendError(res, error, 'Failed to fetch genres from TMDB');
+    }
+  });
+
+  // Original-language options for the discover filter, sourced from TMDB itself
+  // (not hardcoded). Trimmed to the languages that back real catalogue volume.
+  const LANGUAGE_ALLOW = new Set([
+    'en', 'ja', 'ko', 'zh', 'fr', 'es', 'de', 'it', 'pt', 'ru',
+    'hi', 'th', 'tr', 'sv', 'da', 'no', 'nl', 'pl', 'fi', 'ar'
+  ]);
+  router.post('/languages', async (req, res) => {
+    try {
+      const cached = cache.get('languages');
+      if (cached) { res.setHeader('X-Cache', 'HIT'); return res.json(cached); }
+      const response = await tmdbFetch('/configuration/languages', {});
+      const data = await response.json();
+      if (!response.ok || !Array.isArray(data)) {
+        return res.status(502).json({ error: 'TMDB API error' });
+      }
+      const list = data
+        .filter((l) => l && l.iso_639_1 && LANGUAGE_ALLOW.has(l.iso_639_1))
+        .map((l) => ({ code: l.iso_639_1, name: l.english_name || l.name || l.iso_639_1 }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      cache.set('languages', list, TTL.genres);
+      res.setHeader('X-Cache', 'MISS');
+      res.json(list);
+    } catch (error) {
+      sendError(res, error, 'Failed to fetch languages from TMDB');
     }
   });
 

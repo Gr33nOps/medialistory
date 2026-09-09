@@ -16,7 +16,7 @@ test('required entry files exist with Linux casing', () => {
     'Backend/kitsu.js',
     'Backend/kitsuUtils.js',
     'Backend/neonAuth.js',
-    'Backend/myGameList.js',
+    'Backend/library.js',
     'Backend/localUser.js',
     'Backend/sessionCookies.js',
     'Frontend/index.html',
@@ -26,8 +26,6 @@ test('required entry files exist with Linux casing', () => {
     'Frontend/anime.html',
     'Frontend/media-browse.js',
     'Frontend/auth.html',
-    'Frontend/admin.html',
-    'Frontend/moderator.html',
     'Frontend/common.js',
     'DB/schema.postgres.sql',
     'docs/API.md',
@@ -40,6 +38,8 @@ test('required entry files exist with Linux casing', () => {
   assert.ok(!fs.existsSync(path.join(root, 'Frontend/landing.js')), 'landing.js should be removed');
   assert.ok(!fs.existsSync(path.join(root, 'Frontend/landing.css')), 'landing.css should be removed');
   assert.ok(!fs.existsSync(path.join(root, 'Backend/publicShowcase.js')), 'publicShowcase.js should be removed');
+  assert.ok(!fs.existsSync(path.join(root, 'Frontend/admin.html')), 'admin.html should be removed');
+  assert.ok(!fs.existsSync(path.join(root, 'Frontend/moderator.html')), 'moderator.html should be removed');
 });
 
 test('backend factories export functions', () => {
@@ -47,7 +47,7 @@ test('backend factories export functions', () => {
     './auth',
     './admin',
     './moderator',
-    './myGameList',
+    './library',
     './igdb',
     './tmdb',
     './kitsu',
