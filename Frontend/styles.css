@@ -944,19 +944,23 @@ select.update-status-select option,
     line-height: 1.4;
 }
 
+/* Text links follow the page's category accent (amber on Games, green on
+   Shows, and so on) rather than a fixed blue that belonged to no category.
+   --accent-light falls back to neutral slate on pages with no category. */
 .link-btn {
     background: none;
     border: none;
-    color: var(--blue-light);
+    color: var(--accent-light);
     cursor: pointer;
     font-size: inherit;
     font-weight: 600;
     padding: 4px 0;
     min-height: 44px;
     text-decoration: underline;
+    text-underline-offset: 2px;
 }
 
-.link-btn:hover { color: var(--blue); }
+.link-btn:hover { color: var(--text-primary); }
 
 .game-image-wrapper {
     position: relative;
@@ -1116,7 +1120,7 @@ select.update-status-select option,
 .list-game-score-display {
     font-size: 1.1rem;
     font-weight: 700;
-    color: var(--blue-light);
+    color: var(--accent-light);
     background: var(--blue-dim);
     padding: 8px 16px;
     border-radius: var(--radius-md);
@@ -2632,12 +2636,12 @@ body[data-page="games"] .score-btn, [data-cat="games"] .score-btn { color: #fff;
 .cl-default-meta { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .cl-meta-pill {
-    background: var(--blue-dim);
-    border: 1px solid var(--blue-glow);
+    background: var(--accent-dim);
+    border: 1px solid var(--accent-border);
     border-radius: var(--radius-pill);
     padding: 4px 12px;
     font-size: 0.78rem;
-    color: var(--blue-light);
+    color: var(--accent-light);
 }
 
 .cl-default-arrow {
@@ -2648,7 +2652,7 @@ body[data-page="games"] .score-btn, [data-cat="games"] .score-btn { color: #fff;
 }
 
 .cl-default-card:hover .cl-default-arrow {
-    color: var(--blue-light);
+    color: var(--accent-light);
     transform: translateX(4px);
 }
 
@@ -2817,7 +2821,7 @@ body[data-page="games"] .score-btn, [data-cat="games"] .score-btn { color: #fff;
     gap: 6px;
     background: none;
     border: none;
-    color: var(--blue-light);
+    color: var(--accent-light);
     font-size: 0.9rem;
     font-weight: 600;
     cursor: pointer;
@@ -2920,7 +2924,7 @@ body[data-page="games"] .score-btn, [data-cat="games"] .score-btn { color: #fff;
 
 .cl-game-note {
     font-size: 0.78rem;
-    color: var(--blue-light);
+    color: var(--accent-light);
     margin-top: 4px;
     font-style: italic;
     white-space: nowrap;
@@ -4227,6 +4231,195 @@ a.cat-stat:hover { border-color: var(--cs-color); }
 .detail-similar-card:hover img { transform: translateY(-3px); border-color: var(--accent); }
 .ds-name { font-size: 0.76rem; font-weight: 600; margin-top: 6px; line-height: 1.25; color: var(--text-primary); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 
+
+/* ── Profile page: a person, a character, or a studio ────────────────────────
+   Split header rather than a centred one: the portrait carries the recognition
+   and the words carry the information, so they sit side by side and the eye
+   starts on the left with the name.
+
+   Facts are a definition list, not stat tiles - "Born 1974" is a label and a
+   value, and boxing it would make five of them look like a dashboard.
+
+   Credits are a list, not a poster grid. A filmography is read: who they
+   played, in what, when. A wall of covers answers none of that, so the poster
+   is small, to the left, and there to help you recognise the title. */
+
+/* Back reads as a sibling of the Prev/Next pager: same outline, same accent,
+   same hover lift - so moving through the app feels like one control family. */
+.person-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0 18px;
+    padding: 0 18px 0 14px;
+    min-height: 44px;
+    border: 1px solid var(--accent-border);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--accent-light);
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-decoration: none;
+    transition: transform 0.15s ease, background 0.2s ease, color 0.2s ease;
+}
+.person-back::before { content: '\2039'; font-size: 1.5rem; line-height: 1; font-weight: 400; }
+.person-back:hover {
+    background: var(--accent-dim);
+    color: var(--text-primary);
+    transform: translateY(-1px);
+}
+@media (prefers-reduced-motion: reduce) { .person-back:hover { transform: none; } }
+
+.person-head {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: 28px;
+    align-items: start;
+    margin-bottom: 34px;
+}
+
+.person-portrait {
+    width: 200px;
+    aspect-ratio: 2 / 3;
+    object-fit: cover;
+    border-radius: 12px;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-deep);
+    display: block;
+}
+
+/* A studio's logo is a wordmark on transparency, not a portrait: cropping it to
+   a poster shape would cut the name in half. */
+.person-portrait.is-logo {
+    aspect-ratio: 3 / 2;
+    object-fit: contain;
+    padding: 18px;
+}
+
+.person-name {
+    font-family: var(--font-display, inherit);
+    font-size: clamp(1.7rem, 3.4vw, 2.4rem);
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    margin: 0 0 14px;
+}
+
+.person-facts { display: flex; flex-wrap: wrap; gap: 6px 28px; margin: 0 0 18px; }
+.person-fact dt {
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+}
+.person-fact dd { margin: 0; font-size: 0.92rem; font-weight: 600; }
+
+.person-bio { max-width: 68ch; }
+.person-bio-text { margin: 0 0 6px; font-size: 0.95rem; line-height: 1.65; color: var(--text-secondary, var(--text-muted)); }
+.person-bio-text.is-clamped {
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.person-source { display: inline-block; margin-top: 12px; }
+
+.person-section { margin-bottom: 34px; }
+
+.person-gallery { display: grid; grid-auto-flow: column; grid-auto-columns: 108px; gap: 10px; overflow-x: auto; padding-bottom: 6px; }
+.person-gallery img { width: 108px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 8px; border: 1px solid var(--border-subtle); display: block; }
+
+.person-credits-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.person-credit-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.pt-count { opacity: 0.6; font-variant-numeric: tabular-nums; }
+
+.person-credits { list-style: none; margin: 0; padding: 0; }
+.person-credit + .person-credit { border-top: 1px solid var(--border-subtle); }
+.pc-link {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    gap: 14px;
+    align-items: center;
+    padding: 10px 8px;
+    text-decoration: none;
+    color: inherit;
+    border-radius: 8px;
+}
+a.pc-link:hover { background: var(--accent-dim); }
+a.pc-link:hover .pc-title { color: var(--accent-light); }
+.pc-poster { width: 44px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 5px; border: 1px solid var(--border-subtle); display: block; }
+.pc-text { min-width: 0; }
+.pc-title { display: block; font-weight: 600; font-size: 0.95rem; line-height: 1.3; }
+.pc-role { display: block; font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+.pc-year { font-size: 0.84rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* A cast face is now a way in, so it has to look like one. */
+/* These became anchors so a face can be opened. Anchors bring the browser's own
+   blue and underline with them, which is not this app's link language - the name
+   should read exactly as it did before, and only answer on hover. */
+.detail-cast-card.is-linked {
+    cursor: pointer;
+    display: block;
+    color: inherit;
+    text-decoration: none;
+}
+.detail-cast-card.is-linked .dc-name { color: var(--text-primary); transition: color 0.15s; }
+.detail-cast-card.is-linked:hover img { border-color: var(--accent); }
+.detail-cast-card.is-linked:hover .dc-name { color: var(--accent-light); }
+
+/* Studio credits in the games info grid, once they lead somewhere. */
+.info-link { color: inherit; text-decoration: none; border-bottom: 1px solid var(--border-subtle); }
+.info-link:hover { color: var(--accent-light); border-bottom-color: var(--accent); }
+
+/* People turned up by a search, above the titles they were found in. */
+.people-strip { display: grid; grid-auto-flow: column; grid-auto-columns: 96px; gap: 14px; overflow-x: auto; padding: 2px 0 10px; }
+.people-strip-card { text-align: center; text-decoration: none; color: inherit; }
+.people-strip-card img { width: 96px; height: 96px; object-fit: cover; border-radius: 50%; border: 1px solid var(--border-subtle); display: block; }
+.people-strip-card:hover img { border-color: var(--accent); }
+.people-strip-name { display: block; font-size: 0.8rem; font-weight: 600; margin-top: 8px; line-height: 1.25; }
+.people-strip-note { display: block; font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; line-height: 1.25;
+    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.people-found { margin: 0 0 10px; }
+
+@media (max-width: 700px) {
+    .person-head { grid-template-columns: 132px minmax(0, 1fr); gap: 18px; }
+    .person-portrait { width: 132px; }
+    .person-facts { gap: 6px 18px; }
+    .pc-link { grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; }
+    .pc-poster { width: 38px; }
+}
+
+/* Why a control is off right now. One line, attached to the row it explains,
+   with the single action that gives the control back - not a banner, not a card,
+   because the answer is one sentence long. */
+.query-state-notice {
+    display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+    margin: 8px 0 0; font-size: 0.82rem; color: var(--text-muted);
+}
+.query-state-notice .link-btn { font-size: 0.82rem; }
+
+/* Disabled, not hidden: a control that disappears reads as a bug, and the user
+   still needs to see which sort they had chosen. */
+.filter-select.is-locked, .btn.is-locked {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* The run a title belongs to. Same card size as "More like this" so the modal
+   keeps one rhythm, but each entry carries where it sits in the sequence, and
+   the title you are already on is outlined and inert rather than a link back to
+   itself. That marker is what stops the row reading as more recommendations. */
+.detail-series { display: grid; grid-auto-flow: column; grid-auto-columns: 118px; gap: 12px; overflow-x: auto; padding-bottom: 8px; scroll-snap-type: x proximity; }
+.detail-series-item { padding: 0; border: 0; background: none; text-align: left; scroll-snap-align: start; color: inherit; font: inherit; }
+.detail-series-item:not(.is-here) { cursor: pointer; }
+.detail-series-item img { width: 118px; height: 174px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border-subtle); transition: transform 0.18s, border-color 0.18s; display: block; }
+.detail-series-item:not(.is-here):hover img { transform: translateY(-3px); border-color: var(--accent); }
+.detail-series-item.is-here img { border-color: var(--accent); }
+.dsr-rel { display: block; margin-top: 6px; font-size: 0.66rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
+.detail-series-item.is-here .dsr-rel { color: var(--accent-light); font-weight: 700; }
+.detail-series-item .ds-name { margin-top: 1px; }
+
 /* Game screenshots gallery - a horizontal strip, same scroller treatment as cast. */
 .detail-shots { display: grid; grid-auto-flow: column; grid-auto-columns: 280px; gap: 12px; overflow-x: auto; padding-bottom: 8px; scroll-snap-type: x proximity; }
 .detail-shot { display: block; scroll-snap-align: start; border-radius: 10px; overflow: hidden; border: 1px solid var(--border-subtle); background: var(--bg-deep); }
@@ -4241,6 +4434,8 @@ a.cat-stat:hover { border-color: var(--cs-color); }
     .detail-cast-card img { width: 84px; height: 108px; }
     .detail-similar { grid-auto-columns: 104px; }
     .detail-similar-card img { width: 104px; height: 154px; }
+    .detail-series { grid-auto-columns: 104px; }
+    .detail-series-item img { width: 104px; height: 154px; }
     .detail-shots { grid-auto-columns: 240px; }
     .detail-shot img { width: 240px; }
 }
@@ -4253,6 +4448,22 @@ a.cat-stat:hover { border-color: var(--cs-color); }
     background: rgba(8,12,20,0.82); border: 1px solid var(--accent-border);
     padding: 2px 8px; border-radius: 999px;
 }
+
+/* Mirror of the rating chip, on the other corner: this title is already tracked.
+   Same shape and weight so the two read as one family, not two ideas. */
+.card-owned {
+    position: absolute; top: 8px; left: 8px;
+    font-size: 0.74rem; font-weight: 700; color: var(--accent-light);
+    background: rgba(8,12,20,0.82); border: 1px solid var(--accent-border);
+    padding: 2px 8px; border-radius: 999px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* What the library already holds, above the controls that change it. */
+.atl-owned-note {
+    margin: -4px 0 12px; font-size: 0.82rem; color: var(--text-muted);
+}
+.atl-owned-note strong { color: var(--text-primary); font-weight: 600; }
 
 /* One-tap episode progress in the library */
 .coll-progress { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -4505,6 +4716,8 @@ body.imp-open { overflow: hidden; }
 .imp-c-title { max-width: 260px; }
 .imp-title-in { color: var(--text-primary); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .imp-title-match { color: var(--text-muted); font-size: 0.78rem; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* What a franchise row absorbed, one step quieter again than the matched name. */
+.imp-title-sub { color: var(--text-muted); font-size: 0.72rem; display: block; opacity: 0.85; }
 .imp-c-meta { color: var(--text-muted); white-space: nowrap; }
 .imp-run-bar { height: 10px; background: var(--bg-deep); border-radius: 5px; overflow: hidden; margin-bottom: 12px; }
 .imp-run-fill { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 5px; transition: width 0.25s ease; }
@@ -4539,8 +4752,8 @@ body.imp-open { overflow: hidden; }
 .private-notice p { color: var(--text-muted); max-width: 44ch; margin: 0 auto; line-height: 1.6; }
 
 /* ══ Horizontal scrollers: hidden scrollbar + edge fades + arrow buttons ══ */
-.dash-scroller, .detail-cast, .detail-similar, .detail-shots { scrollbar-width: none; -ms-overflow-style: none; }
-.dash-scroller::-webkit-scrollbar, .detail-cast::-webkit-scrollbar, .detail-similar::-webkit-scrollbar, .detail-shots::-webkit-scrollbar { width: 0; height: 0; display: none; }
+.dash-scroller, .detail-cast, .detail-similar, .detail-series, .detail-shots { scrollbar-width: none; -ms-overflow-style: none; }
+.dash-scroller::-webkit-scrollbar, .detail-cast::-webkit-scrollbar, .detail-similar::-webkit-scrollbar, .detail-series::-webkit-scrollbar, .detail-shots::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
 .scroller { position: relative; }
 /* Edge fade removed - it read as a dark smudge over the Aurora; the arrow
@@ -5363,3 +5576,426 @@ body[data-page="games"]  { --au-1: #f59e0b; --au-2: #f59e0b; --au-3: #f59e0b; }
 @media (prefers-reduced-motion: reduce) {
     .pf-cmp-row { transition: none; }
 }
+
+/* ══ Season ratings ═════════════════════════════════════════════════════════
+   A disclosure inside the collection row. .coll-item is a flex row, so the
+   panel wraps onto its own line rather than being nested in a new wrapper,
+   which keeps the row's own layout and its dividing border untouched. */
+
+.coll-item { flex-wrap: wrap; }
+
+.coll-seasons-btn {
+    padding: 2px 9px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+}
+.coll-seasons-btn:hover { color: var(--text-primary); border-color: var(--border); }
+.coll-seasons-btn[aria-expanded="true"] { color: var(--cat-series-light); border-color: currentColor; }
+.coll-seasons-btn:focus-visible { outline: 2px solid var(--cat-series); outline-offset: 2px; }
+
+.coll-seasons {
+    flex: 1 0 100%;
+    width: 100%;
+    min-width: 0;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-subtle);
+    cursor: default;
+}
+
+.coll-season-note { margin: 0 0 10px; font-size: 0.8rem; color: var(--text-dim); }
+.coll-season-note strong { color: var(--cat-series-light); }
+.coll-season-empty { margin: 0; font-size: 0.85rem; color: var(--text-muted); }
+
+.coll-season {
+    display: grid;
+    /* minmax(0, ...) on every flexible track: a plain 1fr floors at min-content,
+       so a long season name refuses to shrink and shoves the two selects past
+       the edge of the row instead of ellipsing. */
+    grid-template-columns: 1.6em minmax(0, 1fr) minmax(0, 150px) minmax(0, 120px);
+    align-items: center;
+    gap: 10px;
+    padding: 5px 0;
+}
+.coll-season-num {
+    font-family: var(--font-display);
+    font-weight: 700;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+}
+.coll-season-main { min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.coll-season-name {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.coll-season-eps { font-size: 0.75rem; color: var(--text-dim); flex-shrink: 0; }
+/* Fill the grid track and be allowed to shrink with it. Without min-width: 0 a
+   select keeps its own intrinsic width and spills out of the cell. */
+.coll-season .filter-select {
+    padding: 5px 8px;
+    font-size: 0.82rem;
+    width: 100%;
+    min-width: 0;
+}
+
+@media (max-width: 640px) {
+    .coll-season { grid-template-columns: 1.4em 1fr; row-gap: 6px; }
+    .coll-season .filter-select { grid-column: span 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .coll-seasons-btn { transition: none; }
+}
+
+/* ── Secondary sources on a detail view ───────────────────────────────────────
+   Price, MyAnimeList score, opening/ending themes and episode dates. These sit
+   inside the existing .detail-section / .detail-h rhythm and borrow the
+   .detail-prov-row label/value pattern used by "Where to watch", so nothing
+   here introduces a second visual language. No new colours, radii or fonts. */
+
+/* The source credit under each block. Deliberately quiet: it is provenance,
+   not content, and TVmaze's licence requires the attribution be present. */
+.detail-src {
+    margin: 10px 0 0;
+    font-size: 0.76rem;
+    /* --text-dim would sit at ~4.5:1 here: AA, but too tight for 12px. */
+    color: var(--text-muted);
+}
+.detail-src a { color: var(--text-secondary); text-decoration: none; }
+.detail-src a:hover,
+.detail-src a:focus-visible { color: var(--text-secondary); text-decoration: underline; }
+
+/* Price: a line of text, not a card. The figure is the point, so it carries
+   the weight and the "was" sits beside it as secondary information. */
+.detail-deal {
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+}
+.detail-deal-price {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-decoration: none;
+}
+a.detail-deal-price:hover,
+a.detail-deal-price:focus-visible { color: var(--green-light); text-decoration: underline; }
+.detail-deal-was {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--green-light);
+}
+
+/* Reuses .detail-prov-row from "Where to watch"; these only add the value side,
+   which that block did not need. */
+.detail-prov-value {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    min-width: 0;
+}
+.detail-prov-value strong {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    color: var(--text-primary);
+}
+.detail-prov-note { color: var(--text-muted); font-size: 0.78rem; }
+
+/* Openings and endings: an ordered list, because they genuinely are ordered.
+   The label column is fixed so the titles line up down the list. */
+.detail-themes {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.detail-theme {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    align-items: baseline;
+    gap: 4px 12px;
+}
+.detail-theme-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--cat-anime-light, var(--text-muted));
+}
+.detail-theme-title {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.detail-theme-artist {
+    grid-column: 2;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+/* Episode dates. Same label/body split as the theme list so the two read as
+   one family, with the date allowed to wrap under the title on narrow screens. */
+.detail-ep {
+    margin: 0 0 8px;
+    display: grid;
+    grid-template-columns: 74px minmax(0, 1fr);
+    align-items: baseline;
+    gap: 4px 12px;
+}
+.detail-ep:last-of-type { margin-bottom: 0; }
+.detail-ep-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.detail-ep-body {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.detail-ep-when {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+.detail-ep-note {
+    margin: 8px 0 0;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+@media (max-width: 480px) {
+    /* Stack the label above its value: two narrow columns squeeze long song
+       titles and episode names into single-word ribbons otherwise. */
+    .detail-theme,
+    .detail-ep {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 2px;
+    }
+    .detail-theme-artist { grid-column: 1; }
+}
+
+/* ── Quick add ────────────────────────────────────────────────────────────────
+   The plus on a browse card, and the small panel it opens. Both reuse the
+   existing card, button and select language - the panel is a surface like any
+   other popover in the app, not a new visual idea. */
+
+.card-quick-add {
+    position: absolute;
+    left: 8px;
+    bottom: 8px;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid var(--accent-border);
+    background: rgba(10, 12, 18, 0.78);
+    color: var(--accent-light);
+    font-size: 1.2rem;
+    font-weight: 700;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    /* Hidden until the card is touched or focused on pointer devices, so the
+       grid stays about the artwork. Always shown on touch, where there is no
+       hover to reveal it. */
+    opacity: 0;
+    transform: scale(0.9);
+    transition: opacity 0.15s ease, transform 0.15s ease, background 0.2s ease;
+    padding: 0;
+}
+.game-card:hover .card-quick-add,
+.game-card:focus-within .card-quick-add,
+.card-quick-add:focus-visible,
+.card-quick-add.is-owned { opacity: 1; transform: scale(1); }
+
+.card-quick-add:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.card-quick-add.is-owned { background: var(--accent); border-color: var(--accent); color: #fff; }
+body[data-page="games"] .card-quick-add:hover,
+body[data-page="games"] .card-quick-add.is-owned { color: #1a1205; }
+
+@media (hover: none) {
+    .card-quick-add { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .card-quick-add { transition: opacity 0.15s ease; transform: none; }
+    .game-card:hover .card-quick-add { transform: none; }
+}
+
+.quick-add-panel {
+    position: absolute;
+    z-index: 1200;
+    width: 260px;
+    max-width: calc(100vw - 24px);
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 14px;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+    padding: 14px;
+}
+
+.qa-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+.qa-title {
+    font-family: var(--font-display);
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.3;
+    /* Two lines then ellipsis: long titles must not push the controls off. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.qa-close {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.3rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+    min-width: 28px;
+    min-height: 28px;
+}
+.qa-close:hover { color: var(--text-primary); }
+
+.qa-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.qa-row label {
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    width: 54px;
+    flex-shrink: 0;
+}
+.qa-row .filter-select { flex: 1; margin: 0; min-width: 0; }
+.qa-row .score-input { width: 68px; margin: 0; }
+.qa-score-hint { font-size: 0.78rem; color: var(--text-muted); }
+
+.qa-actions { margin-top: 12px; }
+.qa-actions .btn { width: 100%; }
+
+.qa-msg { margin: 8px 0 0; font-size: 0.78rem; min-height: 0; }
+.qa-msg.is-error { color: var(--red-light); }
+.qa-msg.is-ok { color: var(--green-light); }
+
+/* On a phone it stops trying to sit beside a card and becomes a sheet, which
+   is reachable with a thumb and never clipped by the viewport edge. */
+@media (max-width: 560px) {
+    .quick-add-panel {
+        position: fixed;
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        top: auto;
+        width: auto;
+        max-width: none;
+    }
+}
+
+/* ── Title page ───────────────────────────────────────────────────────────────
+   The detail view used to be a modal. As a page it keeps exactly the same
+   section styles, so nothing about it looks new - it just has room to breathe
+   and an address of its own. */
+
+.title-page { margin-bottom: 40px; }
+
+.title-page .game-detail-hero { border-radius: 16px; overflow: hidden; }
+.title-page .game-detail-body { padding: 0; }
+
+.title-page .game-detail-title {
+    font-family: var(--font-display);
+    font-size: clamp(1.5rem, 3.4vw, 2.15rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    margin: 0 0 10px;
+    color: var(--text-primary);
+}
+
+/* Credits in the info grid lead to the person page, so they read as links
+   rather than plain text - in the page's own accent, never a stock blue. */
+.detail-credit-link {
+    color: var(--accent-light);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+}
+.detail-credit-link:hover,
+.detail-credit-link:focus-visible {
+    color: var(--text-primary);
+    border-bottom-color: currentColor;
+}
+
+/* The library panel is the one thing on this page you act on, so it sits above
+   the supporting material and is the only block with its own surface. */
+.title-page .add-to-list {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 16px;
+    padding: 20px;
+    margin: 26px 0;
+}
+.title-page .add-to-list h2 {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 0 0 12px;
+    color: var(--text-primary);
+}
+.atl-list-row { margin-bottom: 12px; }
+.atl-list-row label,
+.title-page .atl-field label,
+.title-page .atl-note label {
+    display: block;
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+.atl-list-row .filter-select { width: 100%; margin: 0; }
+.title-page .atl-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 12px;
+    align-items: end;
+}
+.title-page .atl-controls .filter-select { width: 100%; margin: 0; }
+.title-page .atl-note { margin-top: 14px; }
+.atl-msg { display: block; margin-top: 10px; font-size: 0.82rem; font-weight: 600; }
+
+@media (max-width: 640px) {
+    .title-page .atl-controls { grid-template-columns: minmax(0, 1fr); }
+    .title-page .atl-controls .btn { width: 100%; }
+}
+
+/* Series and similar strips are links now rather than buttons, so they need the
+   anchor reset the button versions never did. */
+a.detail-series-item,
+a.detail-similar-card,
+a.detail-cast-card { text-decoration: none; color: inherit; }

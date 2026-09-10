@@ -8,17 +8,25 @@ const {
   rankSearchResults,
   mapIgdbToRow
 } = require('./igdbUtils');
+const { buildRelations, hasRelations } = require('./relations');
 
 const GAME_FIELDS =
   'name, cover.url, rating, rating_count, summary, first_release_date, ' +
   'aggregated_rating, aggregated_rating_count, total_rating, total_rating_count, ' +
   'genres.name, platforms.name, involved_companies.company.name, ' +
+  // The id as well as the name: a studio credit is only clickable if we know
+  // which studio it is.
+  'involved_companies.company.id, ' +
   'involved_companies.publisher, involved_companies.developer';
 
 const DETAIL_FIELDS =
   GAME_FIELDS + ', storyline, screenshots.url, videos.video_id, videos.name, ' +
   'game_modes.name, player_perspectives.name, ' +
-  'similar_games.name, similar_games.cover.url, similar_games.total_rating';
+  'similar_games.name, similar_games.cover.url, similar_games.total_rating, ' +
+  // The series this game belongs to. IGDB calls it a collection and will expand
+  // its members inline, so the whole run costs nothing beyond the detail call.
+  'collections.name, collections.games.name, collections.games.cover.url, ' +
+  'collections.games.first_release_date, collections.games.game_type';
 
 const ALLOWED_SORT = {
   release: 'first_release_date',
@@ -175,6 +183,39 @@ module.exports = (verifyToken, checkBanned, db) => {
     return res.status(500).json(body);
   }
 
+  /* The other games in this one's series.
+
+     IGDB has no prequel/sequel edge, only membership of a collection, so the
+     entries are ordered by release date and labelled earlier/later - which is
+     all we actually know. Ports, bundles and expansions are left out: they are
+     the same game again, not the one before or after it. */
+  /* Main games and standalone expansions only. Remakes, remasters, ports and
+     enhanced editions are the same game again - listing them as "earlier" would
+     put four versions of The Witcher between it and its sequel. */
+  const SERIES_GAME_TYPES = new Set([0, 4]);
+
+  function seriesRelations(game) {
+    const collections = Array.isArray(game && game.collections) ? game.collections : [];
+    const entries = [];
+    for (const collection of collections) {
+      for (const member of (collection.games || [])) {
+        if (!member || !member.name) continue;
+        if (member.game_type != null && !SERIES_GAME_TYPES.has(Number(member.game_type))) continue;
+        entries.push({
+          id: member.id,
+          name: member.name,
+          released: member.first_release_date
+            ? new Date(member.first_release_date * 1000).toISOString().slice(0, 10)
+            : null,
+          image: member.cover && member.cover.url
+            ? 'https:' + String(member.cover.url).replace('t_thumb', 't_cover_small')
+            : null
+        });
+      }
+    }
+    return buildRelations(entries, game.id);
+  }
+
   function buildGamesQuery(body, opts = {}) {
     const id = clampInt(body.id, 1, Number.MAX_SAFE_INTEGER, 0);
     if (id) {
@@ -199,11 +240,24 @@ module.exports = (verifyToken, checkBanned, db) => {
     const now = Math.floor(Date.now() / 1000);
     const TRENDING_WINDOW = 60 * 60 * 24 * 540; // ~18 months of recent releases
 
-    // Main games + remakes/remasters/etc. Exclude DLC/mods/episodes via game_type.
-    // version_parent / parent_game null drops editions that are child versions.
+    /* Main games + remakes/remasters/ports. Exclude DLC/mods/episodes via
+       game_type, and version_parent = null still drops edition variants (GOTY,
+       Definitive and friends), which really are the same release again.
+
+       parent_game, though, cannot simply be required null: IGDB points a remake
+       or remaster at the original through it, so that one clause was hiding
+       every one of them. Searching "Resident Evil 2" returned the 1998 original
+       and a fan demake but not the 2019 remake. A remake is its own release
+       that people play and rate separately, so it is allowed through on the
+       strength of its game_type.
+       Ports and expanded editions stay excluded when they hang off a parent:
+       those are the same game on another machine, and letting them through put
+       six identical "Resident Evil 2" rows on one page. A remake, remaster or
+       standalone expansion is a different thing to play. */
+    const OWN_RELEASE_TYPES = '(4,8,9)'; // standalone expansion, remake, remaster
     const where = [
       'version_parent = null',
-      'parent_game = null',
+      `(parent_game = null | game_type = ${OWN_RELEASE_TYPES})`,
       'game_type = (0,4,8,9,10,11)'
     ];
 
@@ -440,6 +494,18 @@ module.exports = (verifyToken, checkBanned, db) => {
         ? `detail:${detailId}`
         : `list:${crypto.createHash('sha1').update(JSON.stringify(body)).digest('hex')}`;
 
+      /* IGDB's native search carries its own relevance order and returns 406
+         if a sort is sent with it, so searching means the sort is dropped.
+         Filters are where-clauses and do still combine.
+
+         Set before the cache is consulted: it depends only on the request, and
+         setting it after would show the notice once and never again. */
+      if (!detailId) {
+        // No sort works during a search here either: IGDB rejects the clause.
+        res.setHeader('X-Sort-State', sanitizeToken(body.search, 80) ? 'unavailable' : 'applied');
+        res.setHeader('X-Filters-Applied', '1');
+      }
+
       const cached = cache.get(cacheKey);
       if (cached) {
         res.setHeader('X-Cache', 'HIT');
@@ -500,6 +566,14 @@ module.exports = (verifyToken, checkBanned, db) => {
       // re-orders the fetched results only - it never removes any of them.
       if (searchTerm && Array.isArray(data)) {
         data = rankSearchResults(data, searchTerm, (g) => g && g.name);
+      }
+
+      if (detailId && Array.isArray(data) && data[0]) {
+        const rel = seriesRelations(data[0]);
+        if (hasRelations(rel)) data[0].relations = rel;
+        // The expanded collection is only raw material for that strip; sending
+        // it on would add kilobytes the client never reads.
+        delete data[0].collections;
       }
 
       cache.set(cacheKey, data, detailId ? TTL.detail : TTL.list);
@@ -642,6 +716,11 @@ module.exports = (verifyToken, checkBanned, db) => {
     setTimeout(warmCatalogCaches, 15_000);
     setInterval(warmCatalogCaches, warmMs);
   }
+
+  /* The people endpoint needs to ask IGDB about companies, and the credential
+     and token handling that makes that possible lives in this closure. Handing
+     out the fetch is far better than a second copy of the auth dance. */
+  router.igdbFetch = igdbFetch;
 
   return router;
 };

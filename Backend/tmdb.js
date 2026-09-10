@@ -6,8 +6,11 @@ const { sanitizeToken, clampInt, rankSearchResults } = require('./igdbUtils');
 const {
   tmdbEndpointFor,
   normalizeTmdb,
-  mediaToRow
+  mediaToRow,
+  tmdbImage,
+  externalRef
 } = require('./tmdbUtils');
+const { buildRelations, hasRelations } = require('./relations');
 
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 
@@ -97,6 +100,29 @@ module.exports = (verifyToken, checkBanned, db) => {
     await respectRateLimit();
     const url = `${TMDB_BASE}${pathPart}?${search.toString()}`;
     return fetch(url, { method: 'GET', headers });
+  }
+
+  /* The other films in this one's collection.
+
+     Only movies have this: TMDB models a film series as a `collection` and
+     hands the id back on the detail response, so it costs one extra call. TV
+     has no equivalent - TMDB does not record that one show follows another - so
+     shows get no series strip rather than a guessed one. */
+  async function collectionRelations(detail, currentRef) {
+    const collectionId = detail && detail.belongs_to_collection && detail.belongs_to_collection.id;
+    if (!collectionId) return [];
+
+    const res = await tmdbFetch(`/collection/${collectionId}`, { language: 'en-US' });
+    if (!res.ok) return [];
+    const body = await res.json();
+
+    const entries = (body.parts || []).map((part) => ({
+      id: externalRef('movie', part.id),
+      name: part.title || part.name,
+      released: part.release_date || null,
+      image: tmdbImage(part.poster_path, 'w185')
+    }));
+    return buildRelations(entries, currentRef);
   }
 
   function sendError(res, error, fallbackMessage) {
@@ -381,6 +407,19 @@ module.exports = (verifyToken, checkBanned, db) => {
       ? `detail:${mediaType}:${detailId}`
       : `list:${mediaType}:${crypto.createHash('sha1').update(JSON.stringify(body)).digest('hex')}`;
 
+    /* TMDB's search endpoint takes a query and nothing else: no sort_by, no
+       genre, no year. Discover takes all of them. So searching silently drops
+       every filter and the sort, and the client has to be able to say so.
+
+       Set before the cache is consulted, because it depends only on the request
+       - set after, it would appear on the first response and never again. */
+    if (!detailId) {
+      const searching = !!sanitizeToken(body.search, 80);
+      // No sort works during a search here, so the control has nothing to offer.
+      res.setHeader('X-Sort-State', searching ? 'unavailable' : 'applied');
+      res.setHeader('X-Filters-Applied', searching ? '0' : '1');
+    }
+
     const cached = cache.get(cacheKey);
     if (cached) {
       res.setHeader('X-Cache', 'HIT');
@@ -401,6 +440,10 @@ module.exports = (verifyToken, checkBanned, db) => {
           if (response.ok) {
             const data = await response.json();
             const normalized = normalizeTmdb(mediaType, data);
+            if (normalized) {
+              const rel = await collectionRelations(data, normalized.id).catch(() => []);
+              if (hasRelations(rel)) normalized.relations = rel;
+            }
             const payload = normalized ? [normalized] : [];
             cache.set(cacheKey, payload, TTL.detail);
             persistMedia(payload).catch(() => {});
@@ -513,6 +556,12 @@ module.exports = (verifyToken, checkBanned, db) => {
       sendError(res, error, 'Failed to fetch languages from TMDB');
     }
   });
+
+  /* The enrichment routes need TMDB's external_ids to bridge a show to TVmaze,
+     and the credential handling that makes that possible lives in this closure.
+     Handing out the fetch beats a second copy of the auth dance - the IGDB
+     proxy exposes its own fetch for the people routes for the same reason. */
+  router.tmdbFetch = tmdbFetch;
 
   return router;
 };

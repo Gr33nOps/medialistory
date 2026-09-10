@@ -5,6 +5,9 @@ const { createTtlCache } = require('./cache');
 const { sanitizeToken, clampInt, rankSearchResults } = require('./igdbUtils');
 const { mediaToRow } = require('./tmdbUtils');
 const { normalizeKitsuAnime, categoriesFromIncluded } = require('./kitsuUtils');
+const { collapseFranchises, franchiseOf } = require('./franchise');
+const { buildRelations, hasRelations } = require('./relations');
+const { franchiseMembers } = require('./seasonSources');
 
 const KITSU_BASE = 'https://kitsu.io/api/edge';
 
@@ -70,6 +73,77 @@ module.exports = (verifyToken, checkBanned, db) => {
     const maps = { list, titleToSlug: bySlugTitle };
     cache.set('categories', maps, TTL.genres);
     return maps;
+  }
+
+  /* A second pass of folding, using what we already know rather than the title.
+
+     Grouping by title cannot see a franchise whose seasons are named by arc:
+     "Kimetsu no Yaiba: Yuukaku-hen" shares no stem with "Kimetsu no Yaiba", so
+     Demon Slayer still came back as a wall of separate results. Working it out
+     from scratch here would mean walking Kitsu's sequel chain once per tile,
+     which a grid cannot pay for.
+
+     But once anybody has expanded that franchise, media_seasons already holds
+     the answer, and asking it costs one indexed query for the whole page.
+     Coverage grows as the catalog gets used, and when the table knows nothing
+     this simply does nothing. As everywhere else, an entry is only folded into
+     a parent that is present in the same response - never hidden on a guess. */
+  /* A run we already worked out and stored, for a franchise whose titles share
+     no stem to match on. media_seasons is filled whenever anyone expands the
+     seasons of a title, so coverage grows with use; when it holds nothing this
+     returns nothing and the detail panel simply has no series strip. */
+  async function cachedRun(ref) {
+    if (!db) return [];
+    try {
+      const parent = await db('media_seasons').where('external_ref', ref).first('game_id');
+      if (!parent) return [];
+      const rows = await db('media_seasons')
+        .where('game_id', parent.game_id).orderBy('season_number')
+        .select('name', 'air_date', 'poster_image', 'external_ref');
+      return rows
+        .filter((r) => r.external_ref)
+        .map((r) => ({
+          id: r.external_ref,
+          name: r.name,
+          released: r.air_date ? new Date(r.air_date).toISOString().slice(0, 10) : null,
+          background_image: r.poster_image
+        }));
+    } catch (_) { return []; }
+  }
+
+  async function foldKnownSeasons(items) {
+    if (!db || items.length < 2) return items;
+
+    const refs = items.map((m) => m && m.id).filter(Boolean);
+    let rows = [];
+    try {
+      rows = await db('media_seasons as ms')
+        .join('games as g', 'g.id', 'ms.game_id')
+        .whereIn('ms.external_ref', refs)
+        .select('ms.external_ref as ref', 'g.game_id as parent_ref');
+    } catch (_) { return items; }
+    if (!rows.length) return items;
+
+    const parentOf = new Map();
+    rows.forEach((r) => { if (r.ref !== r.parent_ref) parentOf.set(r.ref, r.parent_ref); });
+    if (!parentOf.size) return items;
+
+    const present = new Map(items.map((m) => [m.id, m]));
+    const out = [];
+    for (const item of items) {
+      const parentRef = parentOf.get(item.id);
+      const parent = parentRef ? present.get(parentRef) : null;
+      if (!parent || parent === item) { out.push(item); continue; }
+
+      /* Both sides get the parent's identity as their franchise, so the browse
+         grid can also drop a season that lands on a later page than its parent. */
+      const key = 'ref:' + parentRef;
+      parent.franchise_key = key;
+      parent.franchise_count = (parent.franchise_count || 1) + 1;
+      item.franchise_key = key;
+      item.franchise_sequel = true;
+    }
+    return out;
   }
 
   function dbRowToNormalized(row) {
@@ -138,8 +212,29 @@ module.exports = (verifyToken, checkBanned, db) => {
       ? `detail:${detailId}`
       : `list:${crypto.createHash('sha1').update(JSON.stringify(body)).digest('hex')}`;
 
+    /* Kitsu applies filter[text], every filter[...] and sort together, so a
+       search keeps its filters and its sort - with one exception. Relevance is
+       what orders a text search, so a Popularity choice is not what ordered
+       these results and should not claim to be.
+
+       Set before the cache is consulted: it depends only on the request, and
+       setting it after would show the notice once and never again. */
+    if (!detailId) {
+      const searching = !!sanitizeToken(body.search, 80);
+      const wantsPopularity = !body.sort || body.sort === 'popularity';
+      /* Only this choice is being ignored, not the control: Top Rated and the
+         date sorts do apply to a search here, so the select must stay usable. */
+      res.setHeader('X-Sort-State', (searching && wantsPopularity) ? 'ignored' : 'applied');
+      res.setHeader('X-Filters-Applied', '1');
+    }
+
     const cached = cache.get(cacheKey);
-    if (cached) { res.setHeader('X-Cache', 'HIT'); return res.json(cached); }
+    if (cached) {
+      res.setHeader('X-Cache', 'HIT');
+      if (Array.isArray(cached)) return res.json(cached);
+      res.setHeader('X-Has-More', cached.hasMore ? '1' : '0');
+      return res.json(cached.items);
+    }
 
     try {
       if (detailId) {
@@ -166,6 +261,10 @@ module.exports = (verifyToken, checkBanned, db) => {
                 const img = c.image || {};
                 const main = mc.attributes && mc.attributes.role === 'main';
                 return {
+                  // Kitsu's cast is the cast of the story, so this is the
+                  // character's own id - what the profile page resolves.
+                  id: rel.id,
+                  ref: `kitsu_char_${rel.id}`,
                   name: c.name,
                   character: main ? 'Main character' : 'Supporting',
                   image: img.original || img.large || img.medium || null,
@@ -178,6 +277,19 @@ module.exports = (verifyToken, checkBanned, db) => {
                 .map(({ _main, ...c }) => c);
             }
           } catch (_) {}
+        }
+        if (normalized) {
+          /* Kitsu records real prequel/sequel edges between entries, so an
+             anime's run is narrative order rather than release order and can be
+             called what it is. */
+          let run = await franchiseMembers({ name: normalized.name }).catch(() => []);
+          if (run.length < 2) run = await cachedRun(normalized.id);
+          const rel = buildRelations(
+            run.map((m) => ({ id: m.id, name: m.name, released: m.released, image: m.background_image })),
+            normalized.id,
+            { ordered: true, narrative: true }
+          );
+          if (hasRelations(rel)) normalized.relations = rel;
         }
         const payload = normalized ? [normalized] : [];
         cache.set(cacheKey, payload, TTL.detail);
@@ -256,6 +368,7 @@ module.exports = (verifyToken, checkBanned, db) => {
       // through enough requests. The /trending feed is a single fixed list.
       let rawData = [];
       let rawIncluded = [];
+      let rawCount = 0;
       let ok = false;
       if (trending) {
         const response = await kitsuFetch('/trending/anime?include=categories');
@@ -282,10 +395,14 @@ module.exports = (verifyToken, checkBanned, db) => {
         }
         rawData = rawData.slice(0, limit);
       }
+      rawCount = rawData.length;
 
       if (!ok) {
         const degraded = await loadListFromDb(body);
-        if (degraded && degraded.length) { res.setHeader('X-Cache', 'DEGRADED'); return res.json(degraded); }
+        if (degraded && degraded.length) {
+          res.setHeader('X-Cache', 'DEGRADED');
+          return res.json(collapseFranchises(degraded));
+        }
         return res.status(502).json({ error: 'Kitsu API error' });
       }
       const cats = categoriesFromIncluded(rawIncluded);
@@ -293,16 +410,56 @@ module.exports = (verifyToken, checkBanned, db) => {
 
       // Kitsu's text filter is typo-tolerant and relevance-ranked; this only
       // promotes exact / prefix title matches above near-matches (nothing dropped).
+      /* Ranked on the catalog title only, deliberately. Ranking on a title's
+         other names sounds strictly better and is not: searching "demon slayer"
+         then puts an obscure 2016 show called Onigiri first, because one of its
+         aliases is exactly "Demon Slayer", above the show everyone means. An
+         alias is good evidence when matching a title you already know, which is
+         what the list import does with alt_titles - it is bad evidence when
+         someone is searching and the popular answer should win. */
       if (search) normalized = rankSearchResults(normalized, search, (m) => m && m.name);
 
-      cache.set(cacheKey, normalized, TTL.list);
+      /* Everything Kitsu returned is written to the catalog, including the
+         seasons that are about to be folded away: they are still real entries,
+         and the season list a library row opens is built out of them. Only the
+         view collapses. */
       persist(normalized).catch(() => {});
+
+      /* Every anime carries its franchise, folded or not. It is one short
+         string, and it means a caller never has to re-derive the grouping rule
+         for itself - the list import groups a MyAnimeList export by exactly
+         this, rather than keeping a second copy of the title parsing in the
+         browser that could drift away from this one. */
+      normalized.forEach((m) => {
+        const f = franchiseOf(m.name);
+        m.franchise_key = f.key;
+        if (f.isSequel) m.franchise_sequel = true;
+      });
+
+      /* Pages stay aligned to Kitsu's own offsets rather than being topped back
+         up to `limit`, so no title is ever skipped or repeated across pages. An
+         anime page therefore shows a few tiles fewer than a movie page, which
+         is the whole point: those tiles were the same show listed five times.
+         Because the client can no longer infer "there is more" from a full
+         page, the answer is sent explicitly. */
+      /* Collapsing is for people looking at a grid. A caller that is matching a
+         list of titles one by one needs to find the individual seasons, so it
+         can ask for them - the import does, then groups them itself. */
+      const collapsed = body.collapse === false
+        ? normalized
+        : await foldKnownSeasons(collapseFranchises(normalized));
+      const hasMore = rawCount >= limit;
+      cache.set(cacheKey, { items: collapsed, hasMore }, TTL.list);
       res.setHeader('X-Cache', 'MISS');
-      return res.json(normalized);
+      res.setHeader('X-Has-More', hasMore ? '1' : '0');
+      return res.json(collapsed);
     } catch (error) {
       if (!detailId) {
         const degraded = await loadListFromDb(body);
-        if (degraded && degraded.length) { res.setHeader('X-Cache', 'DEGRADED'); return res.json(degraded); }
+        if (degraded && degraded.length) {
+          res.setHeader('X-Cache', 'DEGRADED');
+          return res.json(collapseFranchises(degraded));
+        }
       }
       return sendError(res, error, 'Failed to fetch from Kitsu');
     }
