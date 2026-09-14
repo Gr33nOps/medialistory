@@ -20,6 +20,7 @@ let currentPage    = 1;
 let gamesPerPage   = 24;
 let apiGamesPerPage = 24;
 let isLoading    = false;
+let pendingQuery = false;
 let hasMoreGames = true;
 let retryCount   = 0;
 const maxRetries = 3;
@@ -380,12 +381,13 @@ function skeletonCards(n) {
 
 async function fetchGames(replace) {
     if (replace === undefined) replace = true;
-    if (isLoading || (!replace && !hasMoreGames)) return;
+    if (isLoading) { if (replace) pendingQuery = true; return; }
+    if (!replace && !hasMoreGames) return;
     isLoading = true;
 
     if (replace) {
         document.getElementById('loadingIndicator').style.display = 'none';
-        document.getElementById('searchResults').innerHTML = skeletonCards(12);
+        document.getElementById('searchResults').innerHTML = skeletonCards(apiGamesPerPage);
     } else {
         document.getElementById('loadingIndicator').style.display = 'flex';
     }
@@ -418,6 +420,7 @@ async function fetchGames(replace) {
         });
 
         var data = await response.json();
+        if (pendingQuery) return;
 
         if (response.ok) {
             retryCount = 0;
@@ -495,6 +498,7 @@ async function fetchGames(replace) {
             collectFilterOptions(transformedGames);
             // Before rendering, so the first paint already carries the badges.
             if (typeof loadLibraryIndex === 'function') await loadLibraryIndex();
+            if (pendingQuery) return;
             displaySearchResults(transformedGames, replace);
             updatePaginationButtons();
 
@@ -508,13 +512,14 @@ async function fetchGames(replace) {
         } else if (response.status === 429 && retryCount < maxRetries) {
             retryCount++;
             await new Promise(function(resolve) { setTimeout(resolve, 2000 * retryCount); });
-            return fetchGames(replace);
+            pendingQuery = true;
+            return;
         } else {
             var errBody = {};
             try { errBody = await response.json(); } catch (_) {}
             var msg = 'Could not load games from IGDB.';
             if (response.status === 401) msg = 'Session expired - sign in again to browse games.';
-            else if (response.status === 503) msg = 'Database unavailable. Game browse needs a healthy /ready check.';
+            else if (response.status === 503) msg = 'Games are temporarily unavailable. Please try again shortly.';
             else if (response.status === 429) msg = 'IGDB rate limit hit. Wait a moment, then retry.';
             else if (typeof describeApiError === 'function') msg = describeApiError(response, errBody, msg);
             document.getElementById('searchResults').innerHTML =
@@ -526,15 +531,17 @@ async function fetchGames(replace) {
         if (retryCount < maxRetries) {
             retryCount++;
             await new Promise(function(resolve) { setTimeout(resolve, 2000 * retryCount); });
-            return fetchGames(replace);
+            pendingQuery = true;
+            return;
         }
-        var netMsg = 'Network error talking to the server (not IGDB). Check your connection.';
+        var netMsg = 'Could not load games. Check your connection and try again.';
         document.getElementById('searchResults').innerHTML =
             '<div class="empty-state">' + esc(netMsg) + '</div>';
         if (typeof toast === 'function') toast(netMsg, 'error');
     } finally {
         isLoading = false;
         document.getElementById('loadingIndicator').style.display = 'none';
+        if (pendingQuery) { pendingQuery = false; fetchGames(true); }
     }
 }
 
@@ -592,20 +599,20 @@ function displaySearchResults(games, replace) {
         // Poster-first tile: cover + title + year. Genres, platforms and the
         // summary all live on the title's own page.
         var cardLabel = 'View details for ' + (game.name || 'game');
-        var ratingHtml = game.rating ? '<span class="card-rating">★ ' + esc(Number(game.rating).toFixed(1)) + '</span>' : '';
+        var ratingHtml = game.rating ? '<span class="card-rating" aria-label="Community rating ' + esc(Number(game.rating).toFixed(1)) + ' out of 5">★ ' + esc(Number(game.rating).toFixed(1)) + '<span class="rating-scale">/5</span></span>' : '';
         // Says "you already have this" before the user adds it a second time.
         var ownedHtml = typeof ownedBadgeHtml === 'function' ? ownedBadgeHtml(game.id) : '';
         // Saves from the grid without opening (and paying for) the full title.
         var quickHtml = window.MGLQuickAdd
             ? window.MGLQuickAdd.buttonHtml(game.id, typeof libraryEntry === 'function' && !!libraryEntry(game.id))
             : '';
-        return '<div class="game-card" data-game-id="' + esc(game.id) + '" role="button" tabindex="0" aria-label="' + esc(cardLabel) + '">' +
+        return '<div class="game-card" data-game-id="' + esc(game.id) + '">' +
             '<div class="game-image-wrapper">' +
                 '<img src="' + esc(imgSrc) + '" alt="' + esc(game.name || 'Game') + ' cover" class="game-image" loading="lazy" onerror="this.src=\'/img/no-image.svg\'">' +
                 ratingHtml + ownedHtml + quickHtml +
             '</div>' +
             '<div class="game-info">' +
-                '<div class="game-title">' + esc(game.name) + '</div>' +
+                '<a class="game-title game-title-link" href="title.html?ref=' + encodeURIComponent(game.id) + '" aria-label="' + esc(cardLabel) + '">' + esc(game.name) + '</a>' +
                 '<div class="game-card-meta">' + releasedHtml + '</div>' +
             '</div>' +
         '</div>';
@@ -722,6 +729,8 @@ function searchGames() {
     window.scrollTo(0, 0);
     fetchGames(true);
 }
+
+window.__retryBrowse = function () { fetchGames(true); };
 
 function goToPreviousPage() {
     if (currentPage <= 1 || isLoading) return;

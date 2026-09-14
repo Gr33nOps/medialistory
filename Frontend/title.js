@@ -158,10 +158,10 @@
   function descriptionHtml(item) {
     var d = item.description || '';
     if (!d) return '';
-    if (d.length > 420) {
-      return '<div class="game-detail-desc"><span class="desc-short">' + esc(d.slice(0, 420)) + '…</span>' +
+    if (d.length > 240) {
+      return '<div class="game-detail-desc"><span class="desc-short">' + esc(d.slice(0, 420)) + (d.length > 420 ? '…' : '') + '</span>' +
         '<span class="desc-full" hidden>' + esc(d) + '</span> ' +
-        '<button type="button" class="link-btn desc-toggle">Read more</button></div>';
+        '<button type="button" class="link-btn desc-toggle" aria-expanded="false">Read more</button></div>';
     }
     return '<p class="game-detail-desc">' + esc(d) + '</p>';
   }
@@ -380,6 +380,7 @@
         full.hidden = open;
         short.hidden = !open;
         toggle.textContent = open ? 'Read more' : 'Show less';
+        toggle.setAttribute('aria-expanded', String(!open));
       });
     }
 
@@ -484,7 +485,9 @@
   function fail(message) {
     var el = byId('titleState');
     el.hidden = false;
-    el.textContent = message;
+    el.innerHTML = '<h2>Title unavailable</h2><p>' + esc(message) + '</p>' +
+      '<button type="button" class="btn btn-secondary" id="retryTitle">Try again</button>';
+    byId('retryTitle').addEventListener('click', function () { location.reload(); });
     byId('titleBody').hidden = true;
   }
 

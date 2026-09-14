@@ -16,6 +16,8 @@
   var esc = global.esc || function (s) { return String(s == null ? '' : s); };
   var openFor = null;   // ref of the card whose panel is open
   var panelEl = null;
+  var backdropEl = null;
+  var anchorEl = null;
   var listsCache = null;   // the user's custom lists, fetched once and reused
 
   /* The "Add to" dropdown offers the main library plus every custom list, so a
@@ -72,15 +74,29 @@
       '<span aria-hidden="true">' + (owned ? '✓' : '+') + '</span></button>';
   }
 
-  function close() {
+  function close(restoreFocus) {
     if (panelEl && panelEl.parentNode) panelEl.parentNode.removeChild(panelEl);
+    if (backdropEl) backdropEl.remove();
+    backdropEl = null;
+    document.body.classList.remove('qa-sheet-open');
+    if (restoreFocus !== false && anchorEl && anchorEl.isConnected) anchorEl.focus({ preventScroll: true });
+    anchorEl = null;
     panelEl = null;
     openFor = null;
     document.removeEventListener('keydown', onKey, true);
     document.removeEventListener('click', onOutside, true);
+    global.removeEventListener('resize', reposition);
   }
 
+  function reposition() { position(anchorEl); }
+
   function onKey(e) {
+    if (e.key === 'Tab' && panelEl) {
+      var items = Array.from(panelEl.querySelectorAll('button:not(:disabled), select, input:not([type="hidden"]), [tabindex="0"]')).filter(function (el) { return !el.hidden && el.offsetParent !== null; });
+      var first = items[0], last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
     if (e.key === 'Escape') {
       e.stopPropagation();
       var btn = document.querySelector('[data-quick-add="' + cssEscape(openFor) + '"]');
@@ -97,7 +113,7 @@
     if (!panelEl) return;
     if (panelEl.contains(e.target)) return;
     if (e.target.closest && e.target.closest('[data-quick-add]')) return;
-    close();
+    close(false);
   }
 
   function statusOptionsFor(kind, current) {
@@ -129,6 +145,11 @@
     var owned = (typeof global.libraryEntry === 'function') ? global.libraryEntry(ref) : null;
 
     panelEl = document.createElement('div');
+    anchorEl = anchor;
+    backdropEl = document.createElement('div');
+    backdropEl.className = 'quick-add-backdrop';
+    backdropEl.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(backdropEl);
     panelEl.className = 'quick-add-panel';
     panelEl.setAttribute('role', 'dialog');
     panelEl.setAttribute('aria-label', (owned ? 'Edit ' : 'Add ') + (item && item.name ? item.name : 'title'));
@@ -190,6 +211,7 @@
     if (removeBtn) removeBtn.addEventListener('click', function () { remove(ref, owned, anchor); });
 
     openFor = ref;
+    global.addEventListener('resize', reposition);
     // Capture phase so a card's own click handler never sees these.
     document.addEventListener('keydown', onKey, true);
     setTimeout(function () { document.addEventListener('click', onOutside, true); }, 0);
@@ -202,7 +224,14 @@
      it becomes a sheet at the bottom instead, which the stylesheet handles. */
   function position(anchor) {
     if (!panelEl || !anchor) return;
-    if (global.matchMedia && global.matchMedia('(max-width: 560px)').matches) return;
+    var mobile = global.matchMedia && global.matchMedia('(max-width: 560px)').matches;
+    document.body.classList.toggle('qa-sheet-open', !!mobile);
+    if (mobile) {
+      panelEl.setAttribute('aria-modal', 'true');
+      panelEl.style.left = ''; panelEl.style.top = '';
+      return;
+    }
+    panelEl.removeAttribute('aria-modal');
 
     var r = anchor.getBoundingClientRect();
     var pw = panelEl.offsetWidth || 260;

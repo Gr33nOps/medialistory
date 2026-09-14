@@ -488,7 +488,7 @@
     var opts = options || {};
     var overlay = document.getElementById(id);
     if (!overlay) return;
-    var dialog = overlay.querySelector('.modal-content') || overlay;
+    var dialog = overlay.querySelector('.modal-content, .update-modal-content, .remove-modal-content, .cl-modal-box, .cl-game-modal-box') || overlay;
     var titleId = opts.titleId || (dialog.querySelector('[id$="Title"], h2, h3') || {}).id;
 
     if (modalState && modalState.id !== id) closeModal(modalState.id);
@@ -499,7 +499,7 @@
     overlay.setAttribute('aria-modal', 'true');
     if (titleId) overlay.setAttribute('aria-labelledby', titleId);
 
-    dialog.setAttribute('role', 'document');
+    if (dialog !== overlay) dialog.setAttribute('role', 'document');
 
     modalState = {
       id: id,
@@ -753,7 +753,7 @@
           '<button type="button" class="score-meter-clear"' + (v == null ? ' hidden' : '') + '>Clear</button>' +
         '</div>' +
         '<div class="score-slider" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="10"' +
-          (v == null ? '' : ' aria-valuenow="' + v + '"') + ' aria-label="Score, 0 to 10">' +
+          ' aria-valuenow="' + (v == null ? 0 : v) + '" aria-valuetext="' + (v == null ? 'No score selected' : v + ' out of 10') + '" aria-label="Score, 0 to 10">' +
           '<div class="score-slider-track">' +
             '<span class="score-slider-fill" style="width:' + pct + '%"></span>' +
             '<span class="score-slider-ticks" aria-hidden="true">' + ticks + '</span>' +
@@ -783,7 +783,8 @@
       var pct = (v == null ? 0 : v * 10);
       meter.querySelector('.score-slider-fill').style.width = pct + '%';
       meter.querySelector('.score-slider-thumb').style.left = pct + '%';
-      if (v == null) slider.removeAttribute('aria-valuenow'); else slider.setAttribute('aria-valuenow', v);
+      slider.setAttribute('aria-valuenow', v == null ? 0 : v);
+      slider.setAttribute('aria-valuetext', v == null ? 'No score selected' : v + ' out of 10');
     }
     meter._renderScore = render;
     if (meter.dataset.bound) return; // fresh markup each open, but guard reuse
@@ -935,12 +936,28 @@
         profileBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
       });
       document.addEventListener('click', function (e) { if (!menuWrap.contains(e.target)) closeMenu(); });
-      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
+      menuWrap.addEventListener('keydown', function (e) {
+        var items = Array.from(profileMenu.querySelectorAll('[role="menuitem"]'));
+        if (e.key === 'Escape') { closeMenu(); profileBtn.focus(); }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          menuWrap.classList.add('open');
+          profileBtn.setAttribute('aria-expanded', 'true');
+          var index = items.indexOf(document.activeElement);
+          var next = index < 0 ? (e.key === 'ArrowDown' ? 0 : items.length - 1)
+            : (index + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
+          if (items[next]) items[next].focus();
+        }
+      });
+      menuWrap.addEventListener('focusout', function (e) { if (!menuWrap.contains(e.relatedTarget)) closeMenu(); });
     }
 
     // Mobile drawer toggle (hamburger opens category tabs + user links).
     var toggle = document.getElementById('navToggle');
     if (toggle) {
+      el.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && el.classList.contains('is-open')) { toggle.click(); toggle.focus(); }
+      });
       toggle.addEventListener('click', function () {
         var open = el.classList.toggle('is-open');
         toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -999,22 +1016,46 @@
     overlay.className = 'gsearch';
     overlay.hidden = true;
     overlay.innerHTML =
-      '<div class="gsearch-box" role="dialog" aria-label="Search">' +
+      '<div class="gsearch-box" role="dialog" aria-modal="true" aria-label="Search">' +
         '<div class="gsearch-bar">' +
           '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>' +
-          '<input id="gsearchInput" type="text" placeholder="Search movies, shows, anime, games…" autocomplete="off" aria-label="Search all media" aria-controls="gsearchResults">' +
-          '<button type="button" class="gsearch-esc" id="gsearchClose" aria-label="Close search">Esc</button>' +
+          '<input id="gsearchInput" type="search" role="combobox" aria-expanded="true" aria-autocomplete="list" enterkeyhint="search" placeholder="Search all media…" autocomplete="off" aria-label="Search all media" aria-controls="gsearchResults">' +
+          '<button type="button" class="gsearch-esc" id="gsearchClose" aria-label="Close search" title="Close search (Esc)">Close</button>' +
         '</div>' +
-        '<div id="gsearchResults" class="gsearch-results" role="listbox"></div>' +
+        '<p id="gsearchStatus" class="gsearch-status" role="status" aria-live="polite"></p>' +
+        '<div id="gsearchResults" class="gsearch-results" role="listbox" aria-label="Search results"></div>' +
       '</div>';
     document.body.appendChild(overlay);
 
     var input = overlay.querySelector('#gsearchInput');
     var resultsEl = overlay.querySelector('#gsearchResults');
     var timer = null, activeIndex = -1, seq = 0;
+    var returnFocus = null;
+    var searchStatus = overlay.querySelector('#gsearchStatus');
 
-    function open() { overlay.hidden = false; document.body.classList.add('gsearch-open'); setTimeout(function () { input.focus(); }, 30); }
-    function close() { overlay.hidden = true; document.body.classList.remove('gsearch-open'); input.value = ''; resultsEl.innerHTML = ''; activeIndex = -1; }
+    function open() {
+      returnFocus = document.activeElement;
+      overlay.hidden = false;
+      document.body.classList.add('gsearch-open');
+      searchStatus.textContent = 'Find a movie, series, anime or game. Type at least 2 characters.';
+      input.focus();
+    }
+    function close() {
+      ++seq; clearTimeout(timer);
+      overlay.hidden = true;
+      document.body.classList.remove('gsearch-open');
+      input.value = ''; resultsEl.innerHTML = ''; activeIndex = -1;
+      input.removeAttribute('aria-activedescendant');
+      if (returnFocus && returnFocus.isConnected) returnFocus.focus();
+    }
+    overlay.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+      if (e.key !== 'Tab') return;
+      var focusable = getFocusable(overlay);
+      var first = focusable[0], last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
 
     overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) close(); });
     overlay.querySelector('#gsearchClose').addEventListener('click', close);
@@ -1032,12 +1073,13 @@
     }
 
     async function doSearch(q) {
-      if (q.length < 2) { resultsEl.innerHTML = '<div class="gsearch-hint">Type at least 2 characters to search.</div>'; return; }
       var mine = ++seq;
-      resultsEl.innerHTML = '<div class="gsearch-hint">Searching…</div>';
+      if (q.length < 2) { resultsEl.innerHTML = ''; searchStatus.textContent = 'Type at least 2 characters to search.'; return; }
+      resultsEl.innerHTML = '';
+      searchStatus.textContent = 'Searching…';
       var res = await Promise.all(GROUPS.map(function (g) {
         return apiFetch(g.ep, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ search: q, limit: 6 }) })
-          .then(function (r) { return r.ok ? r.json() : []; }).catch(function () { return []; });
+          .then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
       }));
       if (mine !== seq) return; // a newer query superseded this one
       var html = '', idx = 0;
@@ -1048,7 +1090,7 @@
         html += '<div class="gsearch-group"><div class="gsearch-group-h">' + esc(g.label) + '</div>';
         items.forEach(function (it) {
           var year = it.released ? (' · ' + new Date(it.released).getFullYear()) : '';
-          html += '<a class="gsearch-item" data-idx="' + (idx++) + '" role="option" href="title.html?ref=' + encodeURIComponent(it.id) + '">' +
+          html += '<a class="gsearch-item" id="gsearch-option-' + idx + '" data-idx="' + (idx++) + '" role="option" aria-selected="false" href="title.html?ref=' + encodeURIComponent(it.id) + '">' +
             '<img src="' + esc(it.background_image || '/img/no-image.svg') + '" alt="" loading="lazy" onerror="this.src=\'/img/no-image.svg\'">' +
             '<span class="gsearch-item-txt"><span class="gsearch-item-name">' + esc(it.name) + '</span>' +
             '<span class="gsearch-item-meta">' + single + esc(year) + '</span></span>' +
@@ -1056,17 +1098,25 @@
         });
         html += '</div>';
       });
-      resultsEl.innerHTML = html || '<div class="gsearch-hint">No matches for “' + esc(q) + '”.</div>';
+      resultsEl.innerHTML = html;
+      var failed = GROUPS.filter(function (_, i) { return res[i] === null; }).map(function (g) { return g.label; });
+      searchStatus.textContent = (idx ? idx + ' matches for “' + q + '”.' : failed.length === GROUPS.length ? 'Search is temporarily unavailable.' : 'No matches for “' + q + '”. Try another title.') +
+        (failed.length ? ' Could not search ' + failed.join(', ') + '. Try again shortly.' : '');
       activeIndex = -1;
     }
 
     function highlight(items) {
-      items.forEach(function (el, i) { el.classList.toggle('active', i === activeIndex); });
+      items.forEach(function (el, i) { el.classList.toggle('active', i === activeIndex); el.setAttribute('aria-selected', String(i === activeIndex)); });
+      if (items[activeIndex]) input.setAttribute('aria-activedescendant', items[activeIndex].id);
       if (items[activeIndex]) items[activeIndex].scrollIntoView({ block: 'nearest' });
     }
 
     input.addEventListener('input', function () {
       clearTimeout(timer);
+      ++seq;
+      activeIndex = -1;
+      input.removeAttribute('aria-activedescendant');
+      resultsEl.innerHTML = '';
       var q = input.value.trim();
       timer = setTimeout(function () { doSearch(q); }, 300);
     });
@@ -1075,7 +1125,6 @@
       if (e.key === 'ArrowDown') { e.preventDefault(); activeIndex = Math.min(activeIndex + 1, items.length - 1); highlight(items); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); activeIndex = Math.max(activeIndex - 1, 0); highlight(items); }
       else if (e.key === 'Enter') { var t = items[activeIndex] || items[0]; if (t) window.location.href = t.getAttribute('href'); }
-      else if (e.key === 'Escape') { close(); }
     });
     document.addEventListener('keydown', function (e) {
       if (!overlay.hidden) return;
@@ -1815,12 +1864,16 @@ function applyQueryStateNotice(state) {
         else filterBtn.removeAttribute('title');
     }
 
-    /* The sentence that used to sit here said out loud what the controls
-       already show: a greyed-out Sort next to a search box is self-explanatory,
-       and the reason is still one hover away in the tooltip. Printing it beside
-       every search was a banner nobody needed twice. */
-    notice.hidden = true;
-    notice.innerHTML = '';
+    // Touch users cannot hover a disabled control to learn why it is locked.
+    // Keep the explanation visible until the search is cleared.
+    notice.hidden = !(sortDead || filtersOff);
+    notice.textContent = filtersOff
+      ? 'Search uses best match. Clear your search to use filters and sorting.'
+      : sortDead ? 'Search results are ordered by best match. Clear your search to sort.' : '';
+    var filterPanel = document.getElementById('filterSection');
+    if (filtersOff && filterPanel) filterPanel.classList.add('hidden');
+    var filterTokens = document.querySelector('.browse-tokens');
+    if (filterTokens) filterTokens.hidden = !!filtersOff;
 }
 
 /* Reads the two headers the list endpoints set. Absent headers mean the caller

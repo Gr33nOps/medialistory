@@ -93,6 +93,28 @@ function initPageTabs() {
 }
 
 function initCollectionTab() {
+    // Keep the collection within reach on phones. The breakdown remains one
+    // tap away, and stays expanded alongside the collection on larger screens.
+    var overview = document.getElementById('collectionOverview');
+    var breakdown = overview && overview.querySelector('.overview-split');
+    if (breakdown && !document.getElementById('overviewToggle')) {
+        breakdown.id = 'overviewBreakdown';
+        var toggle = document.createElement('button');
+        toggle.id = 'overviewToggle';
+        toggle.type = 'button';
+        toggle.className = 'overview-toggle btn btn-secondary';
+        toggle.setAttribute('aria-controls', breakdown.id);
+        overview.insertBefore(toggle, breakdown);
+        var compact = matchMedia('(max-width: 600px)');
+        function setOpen(open) {
+            overview.classList.toggle('is-collapsed', !open);
+            toggle.setAttribute('aria-expanded', String(open));
+            toggle.textContent = open ? 'Hide breakdown' : 'Show breakdown';
+        }
+        setOpen(!compact.matches);
+        toggle.addEventListener('click', function () { setOpen(overview.classList.contains('is-collapsed')); });
+        compact.addEventListener('change', function () { setOpen(!compact.matches); });
+    }
     document.querySelectorAll('.status-tab:not(.cl-status-tab)').forEach(function(tab) {
         tab.addEventListener('click', function() {
             document.querySelectorAll('.status-tab:not(.cl-status-tab)').forEach(function(t) { t.classList.remove('active'); });
@@ -910,7 +932,6 @@ function clOpenListForm(list) {
     clUpdateCharCount('clListName', 'clListNameCount', 100);
     clUpdateCharCount('clListDesc', 'clListDescCount', 500);
     clOpenModal('clListFormModal');
-    setTimeout(function() { document.getElementById('clListName').focus(); }, 100);
 }
 
 async function clSubmitListForm() {
@@ -1024,29 +1045,21 @@ async function clConfirmRemoveGame() {
     finally { btn.disabled = false; }
 }
 
-var _clModalEscBound = false;
 function clOpenModal(id) {
     var el = document.getElementById(id);
     if (!el) return;
     el.classList.add('open');
-    document.body.style.overflow = 'hidden';
-    var focusable = el.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-    if (focusable) focusable.focus();
-    if (!_clModalEscBound) {
-        _clModalEscBound = true;
-        document.addEventListener('keydown', function (e) {
-            if (e.key !== 'Escape') return;
-            document.querySelectorAll('.cl-modal-overlay.open').forEach(function (m) {
-                m.classList.remove('open');
-            });
+    openModal(id, {
+        focusSelector: id === 'clListFormModal' ? '#clListName' : undefined,
+        onClose: function () {
+            el.classList.remove('open');
             document.body.style.overflow = '';
-        });
-    }
+        }
+    });
+    document.body.style.overflow = 'hidden';
 }
 function clCloseModal(id) {
-    var el = document.getElementById(id);
-    if (el) el.classList.remove('open');
-    document.body.style.overflow = '';
+    closeModal(id);
 }
 
 function clUpdateCharCount(inputId, countId, max) {

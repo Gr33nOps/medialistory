@@ -1,34 +1,35 @@
-# End-to-end (Playwright scaffold)
+# End-to-end tests (Playwright)
 
-Optional browser coverage. Not part of default `npm test` CI.
+Browser regression tests for the flows we care about: per-category theming,
+the "Shows" label, the sign-in OAuth buttons, guest browsing, and the SEO
+assets. They run against the **deployed** site by default.
 
-## Setup
+`@playwright/test` is intentionally **not** in the app's `package.json` - the
+app deploys on Render with `npm install`, and we don't want Playwright's
+browser download running on every deploy. Install it on demand instead.
 
-```bash
-npm i -D @playwright/test
-npx playwright install chromium
-```
-
-## Run
-
-Start the app (`npm start`), then:
+## Run locally
 
 ```bash
-# Windows PowerShell
-$env:E2E_EMAIL="you@example.com"
-$env:E2E_PASSWORD="your-password"
-npm run test:e2e
+npm install --no-save @playwright/test   # test runner
+npx playwright install --with-deps chromium
+npm run test:e2e                          # against production
 ```
 
-Spec: `auth-add-game.spec.js` - login → land on `home.html`.
+Target a different environment with `BASE_URL`:
 
-Extend later: open a game modal → Add to List → assert My List row.
+```bash
+BASE_URL=http://localhost:3000 npm run test:e2e
+```
 
-## Manual checklist (no Playwright)
+## What's covered
+- `theming.spec.js` - each category page recolors the whole page (brand +
+  accent), the page header is centered, and there's exactly one H1.
+- `labels.spec.js` - the TV category reads "Shows" (never "Series") in the UI.
+- `auth.spec.js` - `public-config` isn't rate-limited and the Google/GitHub
+  buttons are visible (regression for the disappearing-OAuth-buttons bug).
+- `browse.spec.js` - guests can browse all four categories, open a detail, and
+  the SEO files (robots, sitemap, favicon, social card) are served.
 
-1. Open `/` → Get started → register/login  
-2. Land on `home.html` (or `?next=` target)  
-3. Open a game → Add to List  
-4. Open My List → confirm status/score  
-5. Following → search/follow a user  
-6. Profile → export via `GET /api/user/export`
+CI runs these on a schedule and on demand via
+`.github/workflows/e2e.yml`.
