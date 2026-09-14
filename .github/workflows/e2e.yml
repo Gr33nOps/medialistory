@@ -29,7 +29,7 @@ jobs:
         env:
           BASE_URL: ${{ github.event.inputs.base_url || 'https://medialistory.onrender.com' }}
         run: npx playwright test
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
           name: playwright-report
