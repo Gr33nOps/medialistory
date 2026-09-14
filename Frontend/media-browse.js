@@ -49,6 +49,7 @@
   var currentPage = 1;
   var perPage = 24;
   var isLoading = false;
+  var pendingQuery = false;
   var hasMore = true;
   var lastResults = {}; // ref -> normalized media object (for add-to-library)
 
@@ -252,7 +253,7 @@
   }
 
   async function fetchMedia(replace) {
-    if (isLoading) return;
+    if (isLoading) { pendingQuery = true; return; }
     isLoading = true;
     var loading = byId('loadingIndicator');
     // Show skeleton cards in place of the results while a fresh query loads;
@@ -288,12 +289,15 @@
         body: JSON.stringify(payload)
       });
 
+      if (pendingQuery) return;
+
       if (typeof applyQueryStateNotice === 'function') applyQueryStateNotice(queryStateFrom(r));
 
       var data = await r.json();
       if (r.ok && Array.isArray(data)) {
         // Before rendering, so the first paint already carries the badges.
         if (typeof loadLibraryIndex === 'function') await loadLibraryIndex();
+        if (pendingQuery) return;
         data = foldSeenFranchises(data);
         data.forEach(function (m) { if (m && m.id) lastResults[m.id] = m; });
         /* Anime tiles collapse a franchise into one entry, so a short page no
@@ -320,6 +324,7 @@
     } finally {
       isLoading = false;
       if (loading) loading.style.display = 'none';
+      if (pendingQuery) { pendingQuery = false; fetchMedia(true); }
     }
   }
 
@@ -335,20 +340,20 @@
       // Grid tiles stay poster-first: title + year only. Genres, synopsis and
       // the rest live in the detail modal, one click away.
       var label = 'View details for ' + (m.name || NOUN);
-      var ratingHtml = m.rating ? '<span class="card-rating">★ ' + esc(Number(m.rating).toFixed(1)) + '</span>' : '';
+      var ratingHtml = m.rating ? '<span class="card-rating" aria-label="Community rating ' + esc(Number(m.rating).toFixed(1)) + ' out of 5">★ ' + esc(Number(m.rating).toFixed(1)) + '<span class="rating-scale">/5</span></span>' : '';
       // Says "you already have this" before the user clicks in and adds it twice.
       var ownedHtml = typeof ownedBadgeHtml === 'function' ? ownedBadgeHtml(m.id) : '';
       // Saves from the grid without opening (and paying for) the full title.
       var quickHtml = window.MGLQuickAdd
         ? window.MGLQuickAdd.buttonHtml(m.id, typeof libraryEntry === 'function' && !!libraryEntry(m.id))
         : '';
-      return '<div class="game-card" data-game-id="' + esc(m.id) + '" role="button" tabindex="0" aria-label="' + esc(label) + '">' +
+      return '<div class="game-card" data-game-id="' + esc(m.id) + '">' +
         '<div class="game-image-wrapper">' +
           '<img src="' + esc(imgSrc) + '" alt="' + esc((m.name || NOUN) + ' cover') + '" class="game-image" loading="lazy" onerror="this.src=\'/img/no-image.svg\'">' +
           ratingHtml + ownedHtml + quickHtml +
         '</div>' +
         '<div class="game-info">' +
-          '<div class="game-title">' + esc(m.name) + '</div>' +
+          '<a class="game-title game-title-link" href="title.html?ref=' + encodeURIComponent(m.id) + '" aria-label="' + esc(label) + '">' + esc(m.name) + '</a>' +
           '<div class="game-card-meta">' + releasedHtml + '</div>' +
         '</div>' +
       '</div>';
@@ -376,6 +381,7 @@
 
   // The notice's "Clear search" needs a way back into this page's own reload.
   window.__clearSearch = function () { doSearch(); };
+  window.__retryBrowse = function () { fetchMedia(true); };
 
   function doSearch() {
     var term = byId('searchInput').value.trim();

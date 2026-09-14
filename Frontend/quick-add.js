@@ -16,6 +16,21 @@
   var esc = global.esc || function (s) { return String(s == null ? '' : s); };
   var openFor = null;   // ref of the card whose panel is open
   var panelEl = null;
+  var backdropEl = null;
+  var anchorEl = null;
+  var listsCache = null;   // the user's custom lists, fetched once and reused
+
+  /* The "Add to" dropdown offers the main library plus every custom list, so a
+     title can be filed straight from the grid. Fetched lazily the first time a
+     panel opens and cached for the rest of the session. */
+  function fetchLists() {
+    if (listsCache) return Promise.resolve(listsCache);
+    if (typeof global.apiFetch !== 'function') return Promise.resolve([]);
+    return global.apiFetch('/user/lists')
+      .then(function (r) { return r.ok ? r.json() : { lists: [] }; })
+      .then(function (d) { listsCache = (d && d.lists) || []; return listsCache; })
+      .catch(function () { listsCache = []; return listsCache; });
+  }
 
   /* The catalogue row. Only fields the browse list already carries, which is
      why this needs no detail request. Games come from IGDB with a numeric id
@@ -34,7 +49,10 @@
       publishers: item.publishers || [],
       developers: item.developers || []
     };
-    if (kind === 'game') {
+    // A mixed grid (the homepage) carries several kinds in one container, so
+    // the item's own media_type - when the caller supplied one - decides the
+    // shape rather than the single `kind` the container was bound with.
+    if ((item.media_type || kind) === 'game') {
       base.igdb_id = item.igdb_id || item.id;
       base.playtime = item.playtime || 0;
     } else {
@@ -56,15 +74,29 @@
       '<span aria-hidden="true">' + (owned ? '✓' : '+') + '</span></button>';
   }
 
-  function close() {
+  function close(restoreFocus) {
     if (panelEl && panelEl.parentNode) panelEl.parentNode.removeChild(panelEl);
+    if (backdropEl) backdropEl.remove();
+    backdropEl = null;
+    document.body.classList.remove('qa-sheet-open');
+    if (restoreFocus !== false && anchorEl && anchorEl.isConnected) anchorEl.focus({ preventScroll: true });
+    anchorEl = null;
     panelEl = null;
     openFor = null;
     document.removeEventListener('keydown', onKey, true);
     document.removeEventListener('click', onOutside, true);
+    global.removeEventListener('resize', reposition);
   }
 
+  function reposition() { position(anchorEl); }
+
   function onKey(e) {
+    if (e.key === 'Tab' && panelEl) {
+      var items = Array.from(panelEl.querySelectorAll('button:not(:disabled), select, input:not([type="hidden"]), [tabindex="0"]')).filter(function (el) { return !el.hidden && el.offsetParent !== null; });
+      var first = items[0], last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
     if (e.key === 'Escape') {
       e.stopPropagation();
       var btn = document.querySelector('[data-quick-add="' + cssEscape(openFor) + '"]');
@@ -81,7 +113,7 @@
     if (!panelEl) return;
     if (panelEl.contains(e.target)) return;
     if (e.target.closest && e.target.closest('[data-quick-add]')) return;
-    close();
+    close(false);
   }
 
   function statusOptionsFor(kind, current) {
@@ -113,31 +145,60 @@
     var owned = (typeof global.libraryEntry === 'function') ? global.libraryEntry(ref) : null;
 
     panelEl = document.createElement('div');
+    anchorEl = anchor;
+    backdropEl = document.createElement('div');
+    backdropEl.className = 'quick-add-backdrop';
+    backdropEl.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(backdropEl);
     panelEl.className = 'quick-add-panel';
     panelEl.setAttribute('role', 'dialog');
     panelEl.setAttribute('aria-label', (owned ? 'Edit ' : 'Add ') + (item && item.name ? item.name : 'title'));
+    // New adds default to Completed - the most common thing to log from a grid
+    // is something you have already finished. An existing entry keeps its status.
+    var statusSel = (owned && owned.status) || 'completed';
+
     panelEl.innerHTML =
       '<div class="qa-head">' +
         '<span class="qa-title">' + esc(item && item.name ? item.name : 'This title') + '</span>' +
         '<button type="button" class="qa-close" aria-label="Close">×</button>' +
       '</div>' +
+      (owned ? '' :
+      '<div class="qa-row">' +
+        '<label for="qaTarget">Add to</label>' +
+        '<select id="qaTarget" class="filter-select"><option value="">Your library</option></select>' +
+      '</div>') +
       '<div class="qa-row">' +
         '<label for="qaStatus">Status</label>' +
-        '<select id="qaStatus" class="filter-select">' + statusOptionsFor(kind, owned && owned.status) + '</select>' +
+        '<select id="qaStatus" class="filter-select">' + statusOptionsFor(kind, statusSel) + '</select>' +
       '</div>' +
-      '<div class="qa-row">' +
+      '<div class="qa-row qa-row-score">' +
         '<label for="qaScore">Score</label>' +
-        '<input type="number" id="qaScore" class="score-input" min="1" max="10" placeholder="—"' +
-          (owned && owned.score ? ' value="' + esc(String(owned.score)) + '"' : '') + '>' +
-        '<span class="qa-score-hint">/ 10</span>' +
+        scoreMeterHTML('qaScore', owned && owned.score != null ? owned.score : null) +
       '</div>' +
       '<div class="qa-actions">' +
-        '<button type="button" class="btn btn-primary qa-save">' + (owned ? 'Save changes' : 'Add to library') + '</button>' +
+        '<button type="button" class="btn btn-primary qa-save">' + (owned ? 'Save changes' : 'Add') + '</button>' +
+        (owned ? '<button type="button" class="btn btn-danger qa-remove">Remove from library</button>' : '') +
       '</div>' +
       '<p class="qa-msg" role="status" aria-live="polite"></p>';
 
     document.body.appendChild(panelEl);
     position(anchor);
+    if (typeof bindScoreMeter === 'function') bindScoreMeter('qaScore');
+
+    // Fill the "Add to" dropdown with the user's custom lists once they load.
+    var targetSel = panelEl.querySelector('#qaTarget');
+    if (targetSel) {
+      fetchLists().then(function (lists) {
+        if (!panelEl || openFor !== ref || !targetSel.isConnected) return;
+        lists.forEach(function (l) {
+          var o = document.createElement('option');
+          o.value = 'list:' + l.id;
+          o.textContent = l.name;
+          targetSel.appendChild(o);
+        });
+        position(anchor);
+      });
+    }
 
     panelEl.querySelector('.qa-close').addEventListener('click', function () {
       close();
@@ -146,8 +207,11 @@
     panelEl.querySelector('.qa-save').addEventListener('click', function () {
       save(ref, item, kind, owned);
     });
+    var removeBtn = panelEl.querySelector('.qa-remove');
+    if (removeBtn) removeBtn.addEventListener('click', function () { remove(ref, owned, anchor); });
 
     openFor = ref;
+    global.addEventListener('resize', reposition);
     // Capture phase so a card's own click handler never sees these.
     document.addEventListener('keydown', onKey, true);
     setTimeout(function () { document.addEventListener('click', onOutside, true); }, 0);
@@ -160,7 +224,14 @@
      it becomes a sheet at the bottom instead, which the stylesheet handles. */
   function position(anchor) {
     if (!panelEl || !anchor) return;
-    if (global.matchMedia && global.matchMedia('(max-width: 560px)').matches) return;
+    var mobile = global.matchMedia && global.matchMedia('(max-width: 560px)').matches;
+    document.body.classList.toggle('qa-sheet-open', !!mobile);
+    if (mobile) {
+      panelEl.setAttribute('aria-modal', 'true');
+      panelEl.style.left = ''; panelEl.style.top = '';
+      return;
+    }
+    panelEl.removeAttribute('aria-modal');
 
     var r = anchor.getBoundingClientRect();
     var pw = panelEl.offsetWidth || 260;
@@ -194,14 +265,21 @@
     var status = statusEl ? statusEl.value : 'completed';
     var raw = scoreEl ? String(scoreEl.value).trim() : '';
 
-    if (raw && (!/^\d+$/.test(raw) || Number(raw) < 1 || Number(raw) > 10)) {
-      message('Score must be a whole number from 1 to 10.', 'error');
+    if (raw && (!/^\d+$/.test(raw) || Number(raw) < 0 || Number(raw) > 10)) {
+      message('Score must be a whole number from 0 to 10.', 'error');
       if (scoreEl) scoreEl.focus();
       return;
     }
     var score = raw ? Number(raw) : null;
 
-    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+    var targetEl = panelEl && panelEl.querySelector('#qaTarget');
+    var target = targetEl ? targetEl.value : '';
+    var toList = target.indexOf('list:') === 0 ? target.slice(5) : null;
+    var listName = toList && targetEl.options[targetEl.selectedIndex]
+      ? targetEl.options[targetEl.selectedIndex].textContent : '';
+
+    if (saveBtn && typeof global.setBtnLoading === 'function') global.setBtnLoading(saveBtn, true, owned ? 'Saving…' : 'Adding…');
+    else if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
 
     try {
       var res, data;
@@ -210,6 +288,12 @@
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: status, score: score })
+        });
+      } else if (toList) {
+        res = await global.apiFetch('/user/lists/' + encodeURIComponent(toList) + '/games', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ game_id: ref, game_data: toGameData(item, kind), status: status, score: score })
         });
       } else {
         res = await global.apiFetch('/user/games', {
@@ -226,25 +310,72 @@
       data = await res.json().catch(function () { return {}; });
 
       if (!res.ok) {
-        var already = data.error === 'Game already in your list';
-        message(already ? 'Already in your library.' : (data.error || 'Could not save that.'), already ? 'ok' : 'error');
-        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = owned ? 'Save changes' : 'Add to library'; }
+        var already = data.error === 'Game already in your list' || data.error === 'Game already in this list';
+        message(already ? (toList ? 'Already in that list.' : 'Already in your library.') : (data.error || 'Could not save that.'), already ? 'ok' : 'error');
+        restoreSaveBtn();
         return;
       }
 
-      if (typeof global.setLibraryEntry === 'function' && !data.folded_into) {
-        global.setLibraryEntry(ref, { id: owned && owned.id ? owned.id : data.game_id, status: status, score: score });
+      // A title added only to a custom list is not in the main library, so the
+      // card's owned state (the tick) is left alone in that case.
+      if (!toList) {
+        if (typeof global.setLibraryEntry === 'function' && !data.folded_into) {
+          global.setLibraryEntry(ref, { id: owned && owned.id ? owned.id : data.game_id, status: status, score: score });
+        }
+        if (typeof global.refreshOwnedBadge === 'function') global.refreshOwnedBadge(ref);
+        refreshButton(ref);
       }
-      if (typeof global.refreshOwnedBadge === 'function') global.refreshOwnedBadge(ref);
-      refreshButton(ref);
 
       if (typeof global.toast === 'function') {
-        global.toast(data.folded_into ? data.message : (owned ? 'Updated in your library.' : 'Added to your library.'), 'success');
+        var msg = data.folded_into ? data.message
+          : owned ? 'Updated in your library.'
+          : toList ? ('Added to “' + listName + '”.')
+          : 'Added to your library.';
+        global.toast(msg, 'success');
       }
       close();
     } catch (err) {
       message('Network error. Please try again.', 'error');
-      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = owned ? 'Save changes' : 'Add to library'; }
+      restoreSaveBtn();
+    }
+
+    function restoreSaveBtn() {
+      if (!saveBtn) return;
+      if (typeof global.setBtnLoading === 'function') global.setBtnLoading(saveBtn, false);
+      else { saveBtn.disabled = false; saveBtn.textContent = owned ? 'Save changes' : 'Add'; }
+    }
+  }
+
+  /* Remove an owned title from the main library, straight from the card. */
+  async function remove(ref, owned, anchor) {
+    if (!owned || !owned.id) return;
+    var btn = panelEl && panelEl.querySelector('.qa-remove');
+    if (btn) {
+      if (typeof global.setBtnLoading === 'function') global.setBtnLoading(btn, true, 'Removing…');
+      else { btn.disabled = true; btn.textContent = 'Removing…'; }
+    }
+    try {
+      var res = await global.apiFetch('/user/games/' + encodeURIComponent(owned.id), { method: 'DELETE' });
+      if (!res.ok) {
+        message('Could not remove that.', 'error');
+        restoreRemoveBtn();
+        return;
+      }
+      if (typeof global.setLibraryEntry === 'function') global.setLibraryEntry(ref, null);
+      if (typeof global.refreshOwnedBadge === 'function') global.refreshOwnedBadge(ref);
+      refreshButton(ref);
+      if (typeof global.toast === 'function') global.toast('Removed from your library.', 'success');
+      close();
+      if (anchor) anchor.focus();
+    } catch (err) {
+      message('Network error. Please try again.', 'error');
+      restoreRemoveBtn();
+    }
+
+    function restoreRemoveBtn() {
+      if (!btn) return;
+      if (typeof global.setBtnLoading === 'function') global.setBtnLoading(btn, false);
+      else { btn.disabled = false; btn.textContent = 'Remove from library'; }
     }
   }
 

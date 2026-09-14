@@ -93,6 +93,28 @@ function initPageTabs() {
 }
 
 function initCollectionTab() {
+    // Keep the collection within reach on phones. The breakdown remains one
+    // tap away, and stays expanded alongside the collection on larger screens.
+    var overview = document.getElementById('collectionOverview');
+    var breakdown = overview && overview.querySelector('.overview-split');
+    if (breakdown && !document.getElementById('overviewToggle')) {
+        breakdown.id = 'overviewBreakdown';
+        var toggle = document.createElement('button');
+        toggle.id = 'overviewToggle';
+        toggle.type = 'button';
+        toggle.className = 'overview-toggle btn btn-secondary';
+        toggle.setAttribute('aria-controls', breakdown.id);
+        overview.insertBefore(toggle, breakdown);
+        var compact = matchMedia('(max-width: 600px)');
+        function setOpen(open) {
+            overview.classList.toggle('is-collapsed', !open);
+            toggle.setAttribute('aria-expanded', String(open));
+            toggle.textContent = open ? 'Hide breakdown' : 'Show breakdown';
+        }
+        setOpen(!compact.matches);
+        toggle.addEventListener('click', function () { setOpen(overview.classList.contains('is-collapsed')); });
+        compact.addEventListener('change', function () { setOpen(!compact.matches); });
+    }
     document.querySelectorAll('.status-tab:not(.cl-status-tab)').forEach(function(tab) {
         tab.addEventListener('click', function() {
             document.querySelectorAll('.status-tab:not(.cl-status-tab)').forEach(function(t) { t.classList.remove('active'); });
@@ -173,7 +195,8 @@ function initCollectionTab() {
 
     if (typeof bindActivatableCards === 'function') {
         bindActivatableCards(document, '.coll-item.list-item', function(row) {
-            if (row.dataset.gameId) showGameDetails(row.dataset.gameId);
+            var ref = row.dataset.ref || row.dataset.gameId;
+            if (ref) showGameDetails(ref);
         });
     }
 
@@ -189,6 +212,15 @@ function initCollectionTab() {
             showRemoveModal(e.target.dataset.gameId, e.target.dataset.gameName);
         }
     });
+
+    // A homepage category pill ("Movies", "Shows", ...) links here with
+    // ?media=movie so the collection opens already filtered to that category
+    // instead of dumping the visitor back on "All".
+    var urlMedia = new URLSearchParams(location.search).get('media');
+    if (['movie', 'series', 'anime', 'game'].indexOf(urlMedia) !== -1) {
+        var preselect = document.querySelector('.media-tab[data-media="' + urlMedia + '"]');
+        if (preselect) preselect.click();
+    }
 
     loadMyGames();
 }
@@ -233,29 +265,22 @@ function updateMediaTabCounts() {
 }
 
 function updateStatistics(games) {
-    var stats = {
-        total:        games.length,
-        playing:      games.filter(function(g) { return g.status === 'playing'; }).length,
-        completed:    games.filter(function(g) { return g.status === 'completed'; }).length,
-        plan_to_play: games.filter(function(g) { return g.status === 'plan_to_play'; }).length,
-        on_hold:      games.filter(function(g) { return g.status === 'on_hold'; }).length,
-        dropped:      games.filter(function(g) { return g.status === 'dropped'; }).length
-    };
-    // Pie + bars share one set of segments: on "All" show how the library
-    // splits across the four categories; inside a category show its own status
-    // breakdown. Bars sit on the left, the pie on the right (classic layout).
-    var segments;
-    if (currentMediaFilter === 'all') {
-        var all = myGamesCache || [];
-        segments = CAT_META.map(function(c) {
-            return { label: c.label, color: c.color,
-                count: all.filter(function(g) { return (g.media_type || 'game') === c.key; }).length };
-        });
-    } else {
-        segments = STATUS_META.map(function(s) {
-            return { label: s.label, color: s.color, count: stats[s.key] };
-        });
+    // The bars + pie overview is the whole-library "By category" summary, so it
+    // only belongs on the "All" tab. Inside a single category it was repeating
+    // a status breakdown the tabs and rows already carry, so the collection list
+    // stands on its own there instead.
+    var overview = document.getElementById('collectionOverview');
+    if (currentMediaFilter !== 'all') {
+        if (overview) overview.hidden = true;
+        return;
     }
+    if (overview) overview.hidden = false;
+
+    var all = myGamesCache || [];
+    var segments = CAT_META.map(function(c) {
+        return { label: c.label, color: c.color,
+            count: all.filter(function(g) { return (g.media_type || 'game') === c.key; }).length };
+    });
     var segTotal = segments.reduce(function(s, x) { return s + x.count; }, 0);
     drawBars(segments, segTotal);
     drawPie(segments);
@@ -267,11 +292,7 @@ function updateStatistics(games) {
     }
 
     var titleEl = document.querySelector('.stats-title');
-    if (titleEl) {
-        titleEl.textContent = currentMediaFilter === 'all'
-            ? 'By category'
-            : MEDIA_TAB_LABEL[currentMediaFilter] + ' · by status';
-    }
+    if (titleEl) titleEl.textContent = 'By category';
 }
 
 // Horizontal bars, one per segment, coloured to match the pie slices.
@@ -302,13 +323,6 @@ var CAT_META = [
     { key: 'series', label: 'Shows',  color: '#34d399' },
     { key: 'anime',  label: 'Anime',  color: '#f472b6' },
     { key: 'game',   label: 'Games',  color: '#fbbf24' }
-];
-var STATUS_META = [
-    { key: 'playing',      label: 'Watching / Playing', color: '#3498db' },
-    { key: 'completed',    label: 'Completed',          color: '#2ecc71' },
-    { key: 'plan_to_play', label: 'Planned',            color: '#9b59b6' },
-    { key: 'on_hold',      label: 'On Hold',            color: '#f39c12' },
-    { key: 'dropped',      label: 'Dropped',            color: '#e74c3c' }
 ];
 
 function drawPie(segments) {
@@ -454,7 +468,7 @@ function renderCollectionRow(game) {
           '</div>'
         : '';
 
-    return '<div class="coll-item list-item" data-game-id="' + game.game_id + '" role="button" tabindex="0" aria-label="' + esc('View details for ' + (game.name || 'title')) + '">' +
+    return '<div class="coll-item list-item" data-game-id="' + game.game_id + '" data-ref="' + esc(game.media_ref || game.game_id) + '" role="button" tabindex="0" aria-label="' + esc('View details for ' + (game.name || 'title')) + '">' +
         '<img src="' + esc(imgSrc) + '" alt="' + esc(game.name || 'Cover') + '" class="coll-item-img" loading="lazy" onerror="this.src=\'/img/no-image.svg\'">' +
         '<div class="coll-item-body">' +
             '<div class="coll-item-main">' +
@@ -469,7 +483,7 @@ function renderCollectionRow(game) {
                 (game.notes ? '<div class="coll-note" title="Your review or note">' + esc(game.notes) + '</div>' : '') +
             '</div>' +
             '<div class="coll-item-right">' +
-                '<div class="coll-score-badge">' + (game.score ? game.score : '-') + '</div>' +
+                scoreBadgeHTML(game.score) +
                 editActions +
             '</div>' +
         '</div>' +
@@ -496,7 +510,7 @@ function showUpdateModal(gameId) {
     currentUpdateGameId = gameId;
     var game = myGamesCache.find(function(g) { return g.game_id == gameId; });
     document.getElementById('updateStatus').value        = game ? game.status : 'completed';
-    document.getElementById('updateScore').value         = game && game.score ? game.score : '';
+    document.getElementById('updateScoreMount').innerHTML = scoreMeterHTML('updateScore', game && game.score != null ? game.score : null);
     var updNote = document.getElementById('updateNote');
     if (updNote) updNote.value = game && game.notes ? game.notes : '';
     document.getElementById('updateGameName').textContent = game ? game.name : '';
@@ -523,9 +537,7 @@ function showUpdateModal(gameId) {
     }
     if (typeof openModal === 'function') openModal('updateModal');
     else document.getElementById('updateModal').style.display = 'flex';
-    if (typeof bindScoreInput === 'function') {
-        bindScoreInput('updateScore', 'updateScoreUpBtn', 'updateScoreDownBtn', 'updateScoreClearBtn');
-    }
+    if (typeof bindScoreMeter === 'function') bindScoreMeter('updateScore');
 }
 
 function closeUpdateModal() {
@@ -548,7 +560,7 @@ async function incrementEpisode(gameId) {
         var r = await fetch(`${API_BASE}/user/games/${gameId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-            body: JSON.stringify({ status: status, score: game.score || null, progress: next })
+            body: JSON.stringify({ status: status, score: game.score == null ? null : game.score, progress: next })
         });
         if (r.ok) {
             game.progress = next;
@@ -574,13 +586,15 @@ async function confirmUpdate() {
     var progRow = document.getElementById('updateProgressRow');
     var progInput = document.getElementById('updateProgress');
     var msgDiv = document.getElementById('updateMessage');
-    if (score && (score < 1 || score > 10)) { showError(msgDiv, 'Score must be between 1 and 10'); return; }
-    var body = { status: status, score: score ? parseInt(score) : null };
+    if (score !== '' && (Number(score) < 0 || Number(score) > 10)) { showError(msgDiv, 'Score must be between 0 and 10'); return; }
+    var body = { status: status, score: score !== '' ? parseInt(score) : null };
     if (noteEl) body.notes = noteEl.value.trim();
     if (progRow && progRow.style.display !== 'none' && progInput) {
         var pv = progInput.value;
         body.progress = pv === '' ? null : Math.max(0, parseInt(pv, 10) || 0);
     }
+    var updBtn = document.getElementById('confirmUpdateBtn');
+    if (typeof setBtnLoading === 'function') setBtnLoading(updBtn, true, 'Saving…');
     try {
         var r = await fetch(`${API_BASE}/user/games/${currentUpdateGameId}`, {
             method: 'PUT',
@@ -593,8 +607,12 @@ async function confirmUpdate() {
             setTimeout(function() { closeUpdateModal(); loadMyGames(); }, 1500);
         } else {
             showError(msgDiv, d.error || 'Failed to update game');
+            if (typeof setBtnLoading === 'function') setBtnLoading(updBtn, false);
         }
-    } catch (e) { showError(msgDiv, 'Network error. Please try again.'); }
+    } catch (e) {
+        showError(msgDiv, 'Network error. Please try again.');
+        if (typeof setBtnLoading === 'function') setBtnLoading(updBtn, false);
+    }
 }
 
 function showRemoveModal(gameId, gameName) {
@@ -649,15 +667,6 @@ function initCustomListsTab() {
     document.getElementById('clEditGameCancel').addEventListener('click', function() { clCloseEditModal(); });
     document.getElementById('clEditGameSave').addEventListener('click',   clSaveEditGame);
     document.getElementById('clEditGameModal').addEventListener('click',  function(e) { if (e.target.id === 'clEditGameModal') clCloseEditModal(); });
-
-    document.getElementById('clEditScoreUpBtn').addEventListener('click', function() {
-        var inp = document.getElementById('clEditScoreInput');
-        if (!inp.value) inp.value = 1; else if (parseInt(inp.value) < 10) inp.value = parseInt(inp.value) + 1;
-    });
-    document.getElementById('clEditScoreDownBtn').addEventListener('click', function() {
-        var inp = document.getElementById('clEditScoreInput');
-        if (!inp.value) inp.value = 1; else if (parseInt(inp.value) > 1) inp.value = parseInt(inp.value) - 1;
-    });
 
     document.getElementById('clGameModal').addEventListener('click', function(e) { if (e.target.id === 'clGameModal') clCloseModal('clGameModal'); });
     document.getElementById('clGameModalClose').addEventListener('click', function() { clCloseModal('clGameModal'); });
@@ -780,7 +789,7 @@ async function clExpandRow(row, listId, doFetch) {
     if (!clFilters[listId])   clFilters[listId]   = { search: '', sort: 'recently_added', status: 'all' };
     if (clIsEditMode[listId] === undefined) clIsEditMode[listId] = false;
     if (doFetch || !clListGames[listId]) {
-        body.innerHTML = '<div class="coll-empty-state"><p>Loading...</p></div>';
+        body.innerHTML = '<div class="coll-empty-state"><p>Loading…</p></div>';
         try {
             var d = await clApi('GET', '/user/lists/' + listId);
             clListGames[listId] = d.list.games || [];
@@ -804,7 +813,7 @@ function clRenderListBody(listId) {
         '<div class="cl-acc-toolbar">' +
             '<div class="cl-acc-list-header">' +
                 '<div class="cl-acc-list-header-inputs">' +
-                    '<input type="text" class="search-input cl-acc-search" placeholder="Search games..." value="' + esc(f.search) + '">' +
+                    '<input type="text" class="search-input cl-acc-search" placeholder="Search games…" value="' + esc(f.search) + '">' +
                     '<select class="filter-select cl-acc-sort">' +
                         '<option value="recently_added"' + (f.sort === 'recently_added' ? ' selected' : '') + '>Recently Added</option>' +
                         '<option value="name"'          + (f.sort === 'name'           ? ' selected' : '') + '>Name (A-Z)</option>' +
@@ -869,7 +878,7 @@ function clRenderAccGames(listId) {
     container.querySelectorAll('.cl-list-item[data-game-id]').forEach(function(row) {
         row.addEventListener('click', function(e) {
             if (e.target.closest('.btn') || e.target.closest('.coll-item-edit-actions')) return;
-            clShowGameDetails(row.dataset.gameId);
+            clShowGameDetails(row.dataset.ref || row.dataset.gameId);
         });
     });
     container.querySelectorAll('.cl-edit-game-btn').forEach(function(btn) {
@@ -881,7 +890,6 @@ function clRenderAccGames(listId) {
 }
 
 function clRenderGameRow(g, listId, editMode) {
-    var score       = g.user_score ? g.user_score : '-';
     var statusColor = STATUS_COLOR[g.status] || '#555';
     var statusLabel = STATUS_LABEL[g.status] || (g.status ? g.status : 'No Status');
     var imgSrc      = g.background_image || '/img/no-image.svg';
@@ -895,7 +903,7 @@ function clRenderGameRow(g, listId, editMode) {
         ? '<span class="status-dot-inline" style="background:' + statusColor + ';"></span><span class="coll-item-status">' + statusLabel + '</span>'
         : '<span class="coll-item-status" style="color:var(--text-dim);">No status</span>';
 
-    return '<div class="coll-item cl-list-item" data-game-id="' + g.game_id + '" data-list-id="' + listId + '">' +
+    return '<div class="coll-item cl-list-item" data-game-id="' + g.game_id + '" data-ref="' + esc(g.media_ref || g.game_id) + '" data-list-id="' + listId + '">' +
         '<img src="' + imgSrc + '" alt="' + esc(g.name) + '" class="coll-item-img" loading="lazy" onerror="this.src=\'/img/no-image.svg\'">' +
         '<div class="coll-item-body">' +
             '<div class="coll-item-main">' +
@@ -903,7 +911,7 @@ function clRenderGameRow(g, listId, editMode) {
                 '<div class="coll-item-meta">' + statusMetaHtml + '</div>' +
                 (g.note ? '<div class="coll-note" title="Your review or note">' + esc(g.note) + '</div>' : '') +
             '</div>' +
-            '<div class="coll-item-right"><div class="coll-score-badge">' + score + '</div>' + editActions + '</div>' +
+            '<div class="coll-item-right">' + scoreBadgeHTML(g.user_score) + editActions + '</div>' +
         '</div>' +
     '</div>';
 }
@@ -924,7 +932,6 @@ function clOpenListForm(list) {
     clUpdateCharCount('clListName', 'clListNameCount', 100);
     clUpdateCharCount('clListDesc', 'clListDescCount', 500);
     clOpenModal('clListFormModal');
-    setTimeout(function() { document.getElementById('clListName').focus(); }, 100);
 }
 
 async function clSubmitListForm() {
@@ -934,7 +941,7 @@ async function clSubmitListForm() {
     var category  = document.getElementById('clListCategory').value || null;
     if (!name) { clShowToast('Please enter a list name', 'error'); return; }
     var btn = document.getElementById('clListFormSubmit');
-    btn.disabled = true; btn.textContent = 'Saving...';
+    btn.disabled = true; btn.textContent = 'Saving…';
     try {
         var body = { name: name, description: desc || null, cover_color: '#3a7bd5', is_public: is_public, category: category };
         if (clEditingId) { await clApi('PUT',  '/user/lists/' + clEditingId, body); clShowToast('List updated!', 'success'); }
@@ -954,7 +961,7 @@ function clOpenDeleteModal(list) {
 async function clConfirmDeleteList() {
     if (!_clPendingDeleteId) return;
     var btn = document.getElementById('clDeleteListConfirm');
-    btn.disabled = true; btn.textContent = 'Deleting...';
+    btn.disabled = true; btn.textContent = 'Deleting…';
     try {
         await clApi('DELETE', '/user/lists/' + _clPendingDeleteId);
         clShowToast('List deleted', 'success');
@@ -975,7 +982,9 @@ function clOpenEditGameModal(gameId, listId, gameName, existingScore, existingSt
     _clEditGameId = gameId;
     _clEditListId = listId;
     document.getElementById('clEditGameName').textContent   = gameName || '';
-    document.getElementById('clEditScoreInput').value       = existingScore || '';
+    var _existScore = (existingScore === 0 || existingScore === '0' || (existingScore != null && existingScore !== '')) ? Number(existingScore) : null;
+    document.getElementById('clEditScoreMount').innerHTML   = scoreMeterHTML('clEditScoreInput', _existScore);
+    if (typeof bindScoreMeter === 'function') bindScoreMeter('clEditScoreInput');
     document.getElementById('clEditGameMessage').innerHTML  = '';
     document.getElementById('clEditStatusSelect').value     = existingStatus || 'plan_to_play';
     var clNoteEl = document.getElementById('clEditNoteInput');
@@ -984,28 +993,18 @@ function clOpenEditGameModal(gameId, listId, gameName, existingScore, existingSt
         clNoteEl.value = _g && _g.note ? _g.note : '';
     }
     clOpenEditModal();
-    setTimeout(function() {
-        var inp = document.getElementById('clEditScoreInput');
-        var clr = document.getElementById('clEditScoreClearBtn');
-        inp.focus();
-        if (clr) clr.onclick = function() { inp.value = ''; };
-        inp.addEventListener('input', function() {
-            var v = inp.value.replace(/[^0-9]/g, '');
-            inp.value = v ? Math.min(10, Math.max(1, parseInt(v))) : '';
-        });
-    }, 100);
 }
 
 async function clSaveEditGame() {
     var scoreVal = document.getElementById('clEditScoreInput').value;
-    var score    = scoreVal ? parseInt(scoreVal) : null;
+    var score    = scoreVal !== '' ? parseInt(scoreVal) : null;
     var status   = document.getElementById('clEditStatusSelect').value || null;
     var noteEl   = document.getElementById('clEditNoteInput');
     var note     = noteEl ? noteEl.value.trim() : undefined;
     var msgDiv   = document.getElementById('clEditGameMessage');
-    if (scoreVal && (score < 1 || score > 10)) { showError(msgDiv, 'Score must be between 1 and 10'); return; }
+    if (score != null && (score < 0 || score > 10)) { showError(msgDiv, 'Score must be between 0 and 10'); return; }
     var btn = document.getElementById('clEditGameSave');
-    btn.disabled = true;
+    if (typeof setBtnLoading === 'function') setBtnLoading(btn, true, 'Saving…'); else btn.disabled = true;
     try {
         var payload = { score: score, status: status };
         if (note !== undefined) payload.note = note;
@@ -1017,8 +1016,9 @@ async function clSaveEditGame() {
         }
         showSuccess(msgDiv, 'Game updated successfully!');
         setTimeout(function() { clCloseEditModal(); clRenderAccGames(_clEditListId); }, 1500);
+        return;
     } catch (e) { showError(msgDiv, e.message); }
-    finally { btn.disabled = false; }
+    if (typeof setBtnLoading === 'function') setBtnLoading(btn, false); else btn.disabled = false;
 }
 
 function clOpenRemoveGameModal(gameId, listId, gameName) {
@@ -1045,29 +1045,21 @@ async function clConfirmRemoveGame() {
     finally { btn.disabled = false; }
 }
 
-var _clModalEscBound = false;
 function clOpenModal(id) {
     var el = document.getElementById(id);
     if (!el) return;
     el.classList.add('open');
-    document.body.style.overflow = 'hidden';
-    var focusable = el.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-    if (focusable) focusable.focus();
-    if (!_clModalEscBound) {
-        _clModalEscBound = true;
-        document.addEventListener('keydown', function (e) {
-            if (e.key !== 'Escape') return;
-            document.querySelectorAll('.cl-modal-overlay.open').forEach(function (m) {
-                m.classList.remove('open');
-            });
+    openModal(id, {
+        focusSelector: id === 'clListFormModal' ? '#clListName' : undefined,
+        onClose: function () {
+            el.classList.remove('open');
             document.body.style.overflow = '';
-        });
-    }
+        }
+    });
+    document.body.style.overflow = 'hidden';
 }
 function clCloseModal(id) {
-    var el = document.getElementById(id);
-    if (el) el.classList.remove('open');
-    document.body.style.overflow = '';
+    closeModal(id);
 }
 
 function clUpdateCharCount(inputId, countId, max) {
@@ -1121,9 +1113,10 @@ window.logout = logout;
 var seasonCache = {};
 
 function seasonScoreOptions(selected) {
+    var words = ['Trash', 'Awful', 'Bad', 'Rough', 'Meh', 'Mid', 'Decent', 'Solid', 'Fire', 'Elite', 'Peak'];
     var out = '<option value="">No score</option>';
     for (var i = 10; i >= 1; i--) {
-        out += '<option value="' + i + '"' + (Number(selected) === i ? ' selected' : '') + '>' + i + '</option>';
+        out += '<option value="' + i + '"' + (Number(selected) === i ? ' selected' : '') + '>' + i + ' · ' + words[i] + '</option>';
     }
     return out;
 }
@@ -1170,7 +1163,7 @@ function renderSeasons(panel, ref, data) {
 }
 
 async function loadSeasons(ref, panel) {
-    panel.innerHTML = '<p class="coll-season-empty">Loading seasons...</p>';
+    panel.innerHTML = '<p class="coll-season-empty">Loading seasons…</p>';
     try {
         var r = await fetch(API_BASE + '/user/games/' + encodeURIComponent(ref) + '/seasons', {
             headers: { Authorization: 'Bearer ' + authToken }

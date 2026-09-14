@@ -196,6 +196,9 @@ function displayUserProfile(user) {
     document.getElementById('displayName').textContent      = name;
     document.getElementById('displayUsername').textContent  = user.username;
     document.getElementById('displayCreatedAt').textContent = formatDate(user.created_at);
+    ['displayName', 'displayUsername', 'displayCreatedAt'].forEach(function (id) {
+        document.getElementById(id).classList.remove('skeleton');
+    });
     document.getElementById('userLevel').textContent        = calculateLevel(user.totalGames || 0);
     document.getElementById('followersCount').textContent   = user.followersCount || 0;
     document.getElementById('followingCount').textContent   = user.followingCount || 0;
@@ -334,7 +337,7 @@ function renderCollectionRow(game) {
                 (game.notes ? '<div class="coll-note" title="Review or note">' + esc(game.notes) + '</div>' : '') +
             '</div>' +
             '<div class="coll-item-right">' +
-                '<div class="coll-score-badge">' + (game.score ? game.score : '-') + '</div>' +
+                scoreBadgeHTML(game.score) +
             '</div>' +
         '</div>' +
     '</div>';
@@ -443,7 +446,7 @@ async function upExpandRow(row, listId, doFetch) {
     }
 
     if (doFetch || !upListGames[listId]) {
-        body.innerHTML = '<div class="coll-empty-state"><p>Loading...</p></div>';
+        body.innerHTML = '<div class="coll-empty-state"><p>Loading…</p></div>';
         try {
             var r = await fetch(`${API_BASE}/users/${viewingUserId}/lists/${listId}`, {
                 headers: { 'Authorization': `Bearer ${authToken}` }
@@ -474,7 +477,7 @@ function upRenderListBody(listId) {
         '<div class="cl-acc-toolbar">' +
             '<div class="cl-acc-list-header">' +
                 '<div class="cl-acc-list-header-inputs">' +
-                    '<input type="text" class="search-input up-acc-search" placeholder="Search games..." value="' + esc(f.search) + '">' +
+                    '<input type="text" class="search-input up-acc-search" placeholder="Search games…" value="' + esc(f.search) + '">' +
                     '<select class="filter-select up-acc-sort">' +
                         '<option value="recently_added"' + (f.sort === 'recently_added' ? ' selected' : '') + '>Recently Added</option>' +
                         '<option value="name"'          + (f.sort === 'name'           ? ' selected' : '') + '>Name (A-Z)</option>' +
@@ -532,12 +535,11 @@ function upRenderAccGames(listId) {
 
     container.innerHTML = games.map(function(g) { return upRenderGameRow(g); }).join('');
     container.querySelectorAll('.cl-list-item[data-game-id]').forEach(function(row) {
-        row.addEventListener('click', function() { upShowGameDetails(row.dataset.gameId); });
+        row.addEventListener('click', function() { upShowGameDetails(row.dataset.ref || row.dataset.gameId); });
     });
 }
 
 function upRenderGameRow(g) {
-    var score       = g.user_score ? g.user_score : '-';
     var statusColor = STATUS_COLOR[g.status] || '#555';
     var statusLabel = STATUS_LABEL[g.status] || (g.status ? g.status : 'No Status');
     var imgSrc      = g.background_image || '/img/no-image.svg';
@@ -546,7 +548,7 @@ function upRenderGameRow(g) {
         ? '<span class="status-dot-inline" style="background:' + statusColor + ';"></span><span class="coll-item-status">' + statusLabel + '</span>'
         : '<span class="coll-item-status" style="color:var(--text-dim);">No status</span>';
 
-    return '<div class="coll-item cl-list-item" data-game-id="' + esc(g.game_id) + '">' +
+    return '<div class="coll-item cl-list-item" data-game-id="' + esc(g.game_id) + '" data-ref="' + esc(g.media_ref || g.game_id) + '">' +
         '<img src="' + imgSrc + '" alt="' + esc(g.name) + '" class="coll-item-img" loading="lazy" onerror="this.src=\'/img/no-image.svg\'">' +
         '<div class="coll-item-body">' +
             '<div class="coll-item-main">' +
@@ -554,87 +556,17 @@ function upRenderGameRow(g) {
                 '<div class="coll-item-meta">' + statusMetaHtml + '</div>' +
                 (g.note ? '<div class="coll-note" title="Review or note">' + esc(g.note) + '</div>' : '') +
             '</div>' +
-            '<div class="coll-item-right"><div class="coll-score-badge">' + score + '</div></div>' +
+            '<div class="coll-item-right">' + scoreBadgeHTML(g.user_score) + '</div>' +
         '</div>' +
     '</div>';
 }
 
-async function upShowGameDetails(gameId) {
-    try {
-        var igdbId = String(gameId).replace('igdb_', '');
-
-        var r = await fetch(`${API_BASE}/igdb/games`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + authToken
-            },
-            body: JSON.stringify({ id: Number(igdbId) })
-        });
-
-        var igdbGames = await r.json();
-        if (!r.ok || !igdbGames.length) return;
-
-        var ig         = igdbGames[0];
-        var publishers = [];
-        var developers = [];
-        (ig.involved_companies || []).forEach(function(ic) {
-            if (ic.company) {
-                if (ic.publisher) publishers.push(ic.company.name);
-                if (ic.developer) developers.push(ic.company.name);
-            }
-        });
-
-        var score = null;
-        if (ig.total_rating && ig.total_rating_count >= 5)           score = Math.round(ig.total_rating);
-        else if (ig.aggregated_rating && ig.aggregated_rating_count >= 3) score = Math.round(ig.aggregated_rating);
-
-        var rc       = !score ? '#666' : score >= 90 ? '#10b981' : score >= 75 ? '#3b82f6' : score >= 50 ? '#f59e0b' : '#ef4444';
-        var coverUrl = ig.cover
-            ? 'https:' + ig.cover.url.replace('t_thumb', 't_cover_big')
-            : '/img/no-image.svg';
-
-        var released = ig.first_release_date
-            ? new Date(ig.first_release_date * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-            : null;
-
-        var infoItems = [
-            released          ? { label: 'Released',  value: released }                                                   : null,
-            publishers.length ? { label: 'Publisher', value: publishers.join(', ') }                                      : null,
-            developers.length ? { label: 'Developer', value: developers.join(', ') }                                      : null,
-            ig.platforms && ig.platforms.length ? { label: 'Platforms', value: ig.platforms.map(function(p) { return p.name; }).join(' / ') } : null
-        ].filter(Boolean);
-
-        var genreTagsHtml = (ig.genres || []).length
-            ? '<div class="game-detail-genres">' + ig.genres.map(function(g) { return '<span class="game-detail-genre-tag">' + esc(g.name) + '</span>'; }).join('') + '</div>'
-            : '';
-        var infoGridHtml = infoItems.length
-            ? '<div class="game-detail-info-grid">' + infoItems.map(function(i) { return '<div class="game-detail-info-item"><div class="game-detail-info-label">' + i.label + '</div><div class="game-detail-info-value">' + i.value + '</div></div>'; }).join('') + '</div>'
-            : '';
-
-        var scoreSvg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
-
-        document.getElementById('clGameDetails').innerHTML =
-            '<div class="game-detail-hero"><img src="' + coverUrl + '" alt="' + esc(ig.name) + ' banner" class="game-detail-hero-img" loading="lazy" onerror="this.src=\'/img/no-image.svg\'"></div>' +
-            '<div class="game-detail-body">' +
-                '<div class="game-detail-title-row">' +
-                    '<img src="' + coverUrl + '" alt="' + esc(ig.name) + ' cover" class="game-detail-cover" loading="lazy" onerror="this.src=\'/img/no-image.svg\'">' +
-                    '<div class="game-detail-title-meta">' +
-                        '<div class="game-detail-title">' + esc(ig.name) + '</div>' +
-                        '<div class="game-detail-badges">' +
-                            '<span class="game-detail-score" style="background:' + rc + ';">' + scoreSvg + ' ' + (score ? score + '/100' : 'No Rating') + '</span>' +
-                            (released ? '<span class="game-detail-date">' + released + '</span>' : '') +
-                        '</div>' +
-                    '</div>' +
-                '</div>' +
-                genreTagsHtml + infoGridHtml +
-                (ig.summary ? '<p class="game-detail-desc">' + esc(ig.summary) + '</p>' : '') +
-            '</div>';
-
-        upOpenModal('clGameModal');
-    } catch (e) {
-        console.error('Show CL game details error:', e);
-    }
+/* A title in a shared custom list opens its own page, the same as everywhere
+   else in the app (see the equivalent note in home.js / media-browse.js).
+   This used to fetch IGDB data and render a games-only modal, which only ever
+   worked for games and broke silently for movies/shows/anime in the list. */
+function upShowGameDetails(ref) {
+    if (ref) window.location.href = 'title.html?ref=' + encodeURIComponent(ref);
 }
 
 async function checkFollowStatus() {
@@ -785,9 +717,23 @@ function pfEsc(v) {
     return (typeof esc === 'function') ? esc(v) : String(v == null ? '' : v);
 }
 
+// Straight to the title's own page rather than a browse grid that bounces
+// there. Validated against the same ref shapes title.js's parseRef accepts,
+// so a row with a missing or malformed ref (bad join, stale data) never
+// renders a link that just dead-ends on "That link does not point at a
+// title we can open" - it renders as plain, unclickable text instead.
+var PF_REF_RE = /^(igdb_|tmdb_movie_|tmdb_series_|kitsu_)\d+$/;
 function pfOpenHref(mediaType, ref) {
-    // Straight to the title's own page rather than a browse grid that bounces there.
-    return 'title.html?ref=' + encodeURIComponent(ref);
+    return PF_REF_RE.test(String(ref || '')) ? 'title.html?ref=' + encodeURIComponent(ref) : null;
+}
+
+// Renders an <a> when href is usable, otherwise a plain non-clickable <span>
+// with the same classes/content - never a link that leads nowhere.
+function pfLinkOrSpan(cls, extraAttrs, href, inner) {
+    var tag = href ? 'a' : 'span';
+    var classAttr = cls ? ' class="' + cls + '"' : '';
+    var hrefAttr = href ? ' href="' + pfEsc(href) + '"' : '';
+    return '<' + tag + classAttr + (extraAttrs || '') + hrefAttr + '>' + inner + '</' + tag + '>';
 }
 
 function pfPoster(src, alt) {
@@ -889,14 +835,14 @@ function renderCurrentlyInto(current) {
         if (it.episode_count && it.progress != null) {
             prog = '<span class="pf-current-prog">Episode ' + Number(it.progress) + ' of ' + Number(it.episode_count) + '</span>';
         }
-        return '<a class="pf-current-item" data-cat="' + pfEsc(it.media_type) + '" href="' + pfEsc(pfOpenHref(it.media_type, it.game_id)) + '">' +
+        return pfLinkOrSpan('pf-current-item', ' data-cat="' + pfEsc(it.media_type) + '"',
+            pfOpenHref(it.media_type, it.game_id),
             pfPoster(it.background_image, '') +
             '<span class="pf-current-body">' +
                 '<span class="pf-current-verb">' + verb + '</span>' +
                 '<span class="pf-current-name">' + pfEsc(it.name) + '</span>' +
                 prog +
-            '</span>' +
-        '</a>';
+            '</span>');
     }).join('');
 }
 
@@ -928,11 +874,10 @@ function renderTopTen(top) {
     var items = pfTop[pfActiveTopCat] || [];
     list.innerHTML = items.map(function (it) {
         return '<li class="pf-top-item">' +
-            '<a href="' + pfEsc(pfOpenHref(pfActiveTopCat, it.game_id)) + '" title="' + pfEsc(it.name) + '">' +
+            pfLinkOrSpan('', ' title="' + pfEsc(it.name) + '"', pfOpenHref(pfActiveTopCat, it.game_id),
                 '<span class="pf-top-rank">' + Number(it.position) + '</span>' +
                 pfPoster(it.background_image, it.name) +
-                '<span class="pf-top-name">' + pfEsc(it.name) + '</span>' +
-            '</a>' +
+                '<span class="pf-top-name">' + pfEsc(it.name) + '</span>') +
         '</li>';
     }).join('');
 }
@@ -997,8 +942,8 @@ async function loadCompare() {
     if (!section || !body) return;
 
     section.hidden = false;
-    body.innerHTML = '<p class="pf-empty">Working it out...</p>';
-    if (btn) { btn.disabled = true; btn.textContent = 'Comparing...'; }
+    body.innerHTML = '<p class="pf-empty">Working it out…</p>';
+    if (btn) { btn.disabled = true; btn.textContent = 'Comparing…'; }
 
     try {
         var r = await fetch(API_BASE + '/users/' + encodeURIComponent(viewingUserId) + '/compare', {
@@ -1019,11 +964,10 @@ async function loadCompare() {
 
 function compareTitleRow(item, right) {
     var href = pfOpenHref(item.media_type, item.media_ref);
-    return '<a class="pf-cmp-row" href="' + pfEsc(href) + '" data-cat="' + pfEsc(item.media_type) + '">' +
+    return pfLinkOrSpan('pf-cmp-row', ' data-cat="' + pfEsc(item.media_type) + '"', href,
         pfPoster(item.background_image, '') +
         '<span class="pf-cmp-name">' + pfEsc(item.name) + '</span>' +
-        right +
-    '</a>';
+        right);
 }
 
 function renderCompare(d) {

@@ -71,6 +71,9 @@
     --cat-game-light:    #fbbf24;
     --cat-game-dim:      rgba(245, 158, 11, 0.14);
     --cat-game-border:   rgba(245, 158, 11, 0.40);
+    /* Amber is too light for white text to pass contrast (2.15:1) - fills on
+       the Games page use this near-black ink instead (8.6:1). */
+    --cat-game-ink:      #1a1205;
 
     /* Active page accent. Neutral by default - only the four category pages
        (Movies / Shows / Anime / Games) get a real color, set per-page below.
@@ -204,6 +207,10 @@ img, video, canvas, svg {
     height: auto;
 }
 
+/* Native checkboxes/radios otherwise render in the browser's default blue,
+   clashing with the page's own accent (pink on Anime, amber on Games). */
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+
 ::-webkit-scrollbar { width: 10px; }
 ::-webkit-scrollbar-track { background: var(--bg-card); }
 ::-webkit-scrollbar-thumb {
@@ -215,6 +222,12 @@ img, video, canvas, svg {
 }
 
 .hidden { display: none !important; }
+
+.error,
+.success {
+    animation: msg-pop-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) { .error, .success { animation: none; } }
 
 .error {
     color: #fecaca;
@@ -260,6 +273,14 @@ img, video, canvas, svg {
     margin: 0 auto 20px;
 }
 
+/* The full-page loader follows the page's own accent (pink on Anime, green on
+   Shows, amber on Games) rather than a fixed blue that belonged to no category.
+   Scoped to the standalone loader so the tiny in-button spinners are untouched. */
+.loading-indicator .spinner {
+    border-color: var(--accent-dim);
+    border-top-color: var(--accent-light);
+}
+
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .container {
@@ -302,7 +323,7 @@ img, video, canvas, svg {
     color: #ffffff;
     box-shadow: 0 2px 10px var(--accent-dim);
 }
-body[data-page="games"] .page-tab.active { color: #fff; }
+body[data-page="games"] .page-tab.active { color: var(--cat-game-ink); }
 
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
@@ -406,7 +427,7 @@ body[data-page="games"] .page-tab.active { color: #fff; }
     transition: filter 0.18s ease;
 }
 .nav-cta:hover { filter: brightness(1.12); }
-body[data-page="games"] .nav-cta, body[data-page="games"] .nav-ava { color: #fff; }
+body[data-page="games"] .nav-cta, body[data-page="games"] .nav-ava { color: var(--cat-game-ink); }
 
 /* Profile dropdown (holds My profile, admin links, and Log out). */
 .nav-menu { position: relative; }
@@ -574,6 +595,32 @@ body[data-page="games"] .nav-cta, body[data-page="games"] .nav-ava { color: #fff
     box-shadow: var(--shadow-btn-hover) rgba(245, 158, 11, 0.4);
     transform: translateY(-2px);
 }
+
+/* One consistent press response for every button on the site - placed after
+   the per-variant hover rules so it wins the cascade on equal specificity
+   and always registers, whether or not the pointer is also hovering. */
+.btn:active:not(:disabled) { transform: scale(0.97) !important; transition-duration: 0.08s; }
+@media (prefers-reduced-motion: reduce) { .btn:active:not(:disabled) { transform: none !important; } }
+
+/* Inline loading state for any button (setBtnLoading in common.js): a small
+   spinner in front of the label, colour-matched to the button it sits in
+   (white on solid fills, the page accent on ghost/secondary buttons, and the
+   dark ink on Games' amber fill like every other filled control there). */
+.btn.is-loading { cursor: wait; }
+.btn-spinner {
+    display: inline-block; width: 14px; height: 14px; margin-right: 8px;
+    border: 2px solid rgba(255, 255, 255, 0.35); border-top-color: #fff;
+    border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: -2px;
+    flex-shrink: 0;
+}
+.btn-secondary .btn-spinner {
+    border-color: var(--border); border-top-color: var(--text-primary);
+}
+body[data-page="games"] .btn-primary .btn-spinner,
+[data-cat="games"] .btn-primary .btn-spinner {
+    border-color: rgba(26, 18, 5, 0.35); border-top-color: var(--cat-game-ink);
+}
+@media (prefers-reduced-motion: reduce) { .btn-spinner { animation-duration: 1.4s; } }
 
 .btn-sm  { padding: 10px 14px; font-size: 13px; min-height: 44px; }
 .btn-xs  { font-size: 12px !important; padding: 8px 10px !important; min-height: 44px; border-radius: var(--radius-sm) !important; }
@@ -1156,13 +1203,13 @@ select.update-status-select option,
 
 .status-tab:hover {
     color: var(--text-primary);
-    background: rgba(59, 130, 246, 0.1);
+    background: var(--accent-dim);
 }
 
 .status-tab.active {
-    color: var(--blue);
-    border-bottom-color: var(--blue);
-    background: rgba(59, 130, 246, 0.1);
+    color: var(--accent-light);
+    border-bottom-color: var(--accent-light);
+    background: var(--accent-dim);
 }
 
 .status-badge {
@@ -1286,19 +1333,35 @@ select.update-status-select option,
 }
 
 /* The user's score is category-agnostic, so the badge is neutral - not tied
-   to the movies-blue colour on every row. */
+   to the movies-blue colour on every row. Number + word stacked, same
+   vocabulary as the score meter (0 Trash .. 10 Peak), so a badge on its own
+   says exactly what the meter would have shown while it was being set. */
 .coll-score-badge {
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
     background: var(--bg-deep);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
-    padding: 6px 14px;
-    min-width: 48px;
+    padding: 5px 14px;
+    min-width: 56px;
     text-align: center;
+}
+.coll-score-badge .csb-num {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.15;
     font-variant-numeric: tabular-nums;
 }
+.coll-score-badge .csb-word {
+    font-size: 0.66rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    line-height: 1.1;
+}
+.coll-score-badge.is-empty { color: var(--text-dim); font-size: 1.05rem; font-weight: 700; padding: 10px 14px; }
 
 .coll-item-edit-actions {
     display: flex;
@@ -1451,6 +1514,28 @@ select.update-status-select option,
     padding: 20px;
 }
 
+/* One entrance for every modal family in the app (this one, the custom-list
+   overlays, and the game-detail overlay) - a CSS animation on an element
+   restarts automatically whenever it goes from display:none (or .open being
+   toggled) to visible, so this needs no JS beyond the existing show/hide. */
+.modal, .update-modal, .remove-modal, .cl-modal-overlay, .cl-game-modal-overlay {
+    animation: modal-scrim-in 0.18s ease both;
+}
+.modal-content, .update-modal-content, .remove-modal-content, .cl-modal-box, .cl-game-modal-box {
+    animation: modal-pop-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes modal-scrim-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-pop-in {
+    from { opacity: 0; transform: scale(0.95) translateY(10px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .modal, .update-modal, .remove-modal, .cl-modal-overlay, .cl-game-modal-overlay,
+    .modal-content, .update-modal-content, .remove-modal-content, .cl-modal-box, .cl-game-modal-box {
+        animation: none;
+    }
+}
+
 .update-modal-content,
 .remove-modal-content {
     background: var(--bg-card);
@@ -1596,6 +1681,9 @@ select.update-status-select option,
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
+    /* Breathing room before the genre row below - without it, a badge row that
+       wraps to two lines sits flush against the genre pills with no gap. */
+    margin-bottom: 10px;
 }
 
 .game-detail-score {
@@ -1835,7 +1923,7 @@ select.update-status-select option,
     filter: brightness(1.12);
     transform: translateY(-1px);
 }
-body[data-page="games"] .score-btn, [data-cat="games"] .score-btn { color: #fff; }
+body[data-page="games"] .score-btn, [data-cat="games"] .score-btn { color: var(--cat-game-ink); }
 
 .score-clear-btn {
     background: transparent;
@@ -1856,6 +1944,81 @@ body[data-page="games"] .score-btn, [data-cat="games"] .score-btn { color: #fff;
     transform: none;
     box-shadow: none;
 }
+
+/* Score meter: a draggable 0–10 bar, like a volume slider, with the word for
+   the chosen point shown above it. Follows the page/dialog accent like every
+   other control; the hidden input carries the value so save code reads
+   `.value` unchanged. One thumb reads far better on a phone than a row of
+   eleven small dots did. */
+.score-meter { display: flex; flex-direction: column; gap: 8px; }
+.score-meter-head { display: flex; align-items: baseline; gap: 9px; }
+.score-meter-value {
+    font-family: var(--font-display);
+    font-size: 1.6rem; font-weight: 800; line-height: 1;
+    letter-spacing: -0.02em; color: var(--accent-light);
+    font-variant-numeric: tabular-nums; min-width: 1.4ch;
+    transition: color 0.15s ease;
+}
+.score-meter.is-empty .score-meter-value { color: var(--text-dim); }
+.score-meter-word { font-size: 0.95rem; font-weight: 700; color: var(--text-secondary); }
+.score-meter.is-empty .score-meter-word { font-weight: 600; color: var(--text-dim); }
+.score-meter-clear {
+    margin-left: auto; background: transparent;
+    border: 1px solid var(--border-subtle); color: var(--text-muted);
+    font-size: 0.72rem; font-weight: 600; padding: 4px 11px;
+    border-radius: var(--radius-pill); cursor: pointer; transition: var(--transition-fast);
+}
+.score-meter-clear:hover { color: var(--text-primary); border-color: var(--border); }
+
+/* The whole bar is the hit target (generous vertical padding), not just the
+   thin visible line - comfortable to grab on a phone without precision. */
+.score-slider {
+    position: relative;
+    padding: 15px 13px;
+    cursor: pointer;
+    touch-action: none;
+}
+.score-slider:focus-visible { outline: none; }
+.score-slider:focus-visible .score-slider-thumb { outline: 2px solid var(--accent-light); outline-offset: 3px; }
+.score-slider-track { position: relative; height: 6px; }
+.score-slider-track::before {
+    content: ''; position: absolute; inset: 0;
+    background: var(--bg-deep); border: 1px solid var(--border-subtle); border-radius: 999px;
+}
+.score-slider-fill {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    background: var(--accent); border-radius: 999px 0 0 999px;
+    transition: width 0.15s ease;
+}
+.score-meter.is-empty .score-slider-fill { opacity: 0.45; }
+/* Reference marks at each whole point, purely decorative (not interactive) -
+   keeps some of the "which number is where" cue the old dots gave. */
+.score-slider-ticks { position: absolute; inset: 0; pointer-events: none; }
+.score-slider-tick {
+    position: absolute; top: 50%; width: 2px; height: 6px; border-radius: 1px;
+    background: rgba(148, 163, 184, 0.3); transform: translate(-50%, -50%);
+}
+.score-slider-thumb {
+    position: absolute; top: 50%; left: 0; width: 24px; height: 24px;
+    background: var(--accent); border: 3px solid var(--bg-card); border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    transform: translate(-50%, -50%);
+    transition: left 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+.score-meter.is-empty .score-slider-thumb { opacity: 0.55; }
+.score-slider:hover .score-slider-thumb { transform: translate(-50%, -50%) scale(1.08); }
+.score-slider.dragging { cursor: grabbing; }
+.score-slider.dragging .score-slider-thumb {
+    transition: box-shadow 0.15s ease;
+    transform: translate(-50%, -50%) scale(1.2);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4), 0 0 0 7px var(--accent-dim);
+}
+body[data-page="games"] .score-slider-thumb, [data-cat="games"] .score-slider-thumb { box-shadow: 0 2px 8px rgba(66, 32, 0, 0.35); }
+.score-meter-scale {
+    display: flex; justify-content: space-between;
+    font-size: 0.68rem; font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums;
+}
+@media (prefers-reduced-motion: reduce) { .score-slider-thumb, .score-slider-fill { transition: none; } }
 
 .update-form,
 .remove-form { margin: 0; }
@@ -2157,6 +2320,7 @@ body[data-page="games"] .score-btn, [data-cat="games"] .score-btn { color: #fff;
 }
 
 .detail-value { font-size: 1.1rem; color: var(--text-primary); font-weight: 500; }
+.detail-value.skeleton { display: inline-block; width: 55%; min-width: 90px; height: 1.1em; }
 .profile-actions { display: flex; gap: 15px; justify-content: center; margin-top: 20px; }
 
 .avatar-input-group label {
@@ -3053,8 +3217,8 @@ body[data-page="games"] .score-btn, [data-cat="games"] .score-btn { color: #fff;
 
 .cl-form-textarea:focus {
     outline: none;
-    border-color: var(--blue);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 .cl-form-textarea::placeholder { color: var(--text-dim); }
@@ -3325,14 +3489,14 @@ body[data-page="games"] .score-btn, [data-cat="games"] .score-btn { color: #fff;
 .my-games-section .status-tab:hover,
 .cl-acc-status-tabs .status-tab:hover {
     color: var(--text-primary);
-    background: rgba(59, 130, 246, 0.1);
+    background: var(--accent-dim);
 }
 
 .my-games-section .status-tab.active,
 .cl-acc-status-tabs .status-tab.active {
-    color: var(--blue);
-    border-bottom-color: var(--blue);
-    background: rgba(59, 130, 246, 0.1);
+    color: var(--accent-light);
+    border-bottom-color: var(--accent-light);
+    background: var(--accent-dim);
 }
 
 .cl-acc-status-tabs {
@@ -3755,6 +3919,9 @@ body[data-page="games"] .score-btn, [data-cat="games"] .score-btn { color: #fff;
 
 .toast {
     pointer-events: auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
     padding: 12px 14px;
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
@@ -3763,12 +3930,27 @@ body[data-page="games"] .score-btn, [data-cat="games"] .score-btn { color: #fff;
     box-shadow: var(--shadow-card);
     font-size: 0.9rem;
     line-height: 1.4;
+    animation: toast-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+.toast-icon { flex-shrink: 0; margin-top: 1px; }
+.toast-text { min-width: 0; }
 
-.toast-success { border-color: var(--green); color: var(--green-light); }
-.toast-error { border-color: var(--red); color: var(--red-light); }
+.toast-success { border-color: var(--green); }
+.toast-success .toast-icon { color: var(--green-light); }
+.toast-error { border-color: var(--red); }
+.toast-error .toast-icon { color: var(--red-light); }
 .toast-info { border-color: var(--blue); }
-.toast-out { opacity: 0; transition: opacity 0.2s ease; }
+.toast-info .toast-icon { color: var(--blue-light); }
+.toast-out { opacity: 0; transform: translateY(4px) scale(0.97); transition: opacity 0.2s ease, transform 0.2s ease; }
+
+@keyframes toast-in {
+    from { opacity: 0; transform: translateY(10px) scale(0.96); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .toast { animation: none; }
+    .toast-out { transform: none; }
+}
 
 /* Cold-start state (Render free tier). Replaces the endless skeleton shimmer with
    a calm, centred "the server is starting, it will load" panel. A light scrim
@@ -4135,9 +4317,8 @@ body[data-page="games"],  [data-cat="games"]  { --accent: var(--cat-game);   --a
     box-shadow: 0 0 0 3px var(--accent-dim) !important;
     transition: box-shadow 0.25s ease, border-color 0.25s ease;
 }
-/* Amber (Games) needs dark text for legible contrast on its fills. */
-/* White button text on the vibrant amber stays legible with a soft warm shadow
-   (keeps the bright brand gold instead of a burnt deep amber or harsh black). */
+/* Amber (Games) is too light to carry white text at AA contrast - these fills
+   use the dark ink token instead (8.6:1, see --cat-game-ink). */
 body[data-page="games"] .btn-primary,
 body[data-page="games"] .search-container .btn-primary,
 body[data-page="games"] .nav-actions .btn.active,
@@ -4148,8 +4329,7 @@ body[data-page="games"] .score-btn,
 body[data-page="games"] .page-tab.active,
 body[data-page="games"] .year-chip.active,
 body[data-page="games"] .cal-chip.active {
-    color: #fff;
-    text-shadow: 0 1px 2px rgba(66, 32, 0, 0.6);
+    color: var(--cat-game-ink);
 }
 
 /* ── Mobile navigation drawer polish ──────────────────────────────────── */
@@ -4205,7 +4385,10 @@ a.cat-stat:hover { border-color: var(--cs-color); }
 .detail-section { margin-top: 26px; }
 .detail-h { font-family: var(--font-display); font-size: 1.02rem; font-weight: 700; letter-spacing: -0.01em; color: var(--text-primary); margin: 0 0 13px; }
 
-.detail-trailer { position: relative; aspect-ratio: 16 / 9; border-radius: var(--radius-lg); overflow: hidden; background: #000; cursor: pointer; border: 1px solid var(--border-subtle); }
+/* Capped rather than stretched to the full 1400px content width - a 16:9
+   video at that width is enormous on a wide desktop, taller than the
+   viewport itself. */
+.detail-trailer { position: relative; max-width: 900px; aspect-ratio: 16 / 9; border-radius: var(--radius-lg); overflow: hidden; background: #000; cursor: pointer; border: 1px solid var(--border-subtle); }
 .detail-trailer img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.82; transition: opacity 0.2s; }
 .detail-trailer:hover img { opacity: 1; }
 .detail-trailer iframe { width: 100%; height: 100%; border: 0; display: block; }
@@ -4511,33 +4694,75 @@ a.pc-link:hover .pc-title { color: var(--accent-light); }
 .my-games-list.as-grid .coll-item-right { width: 100%; justify-content: space-between; margin-top: 2px; }
 .view-toggle-btn { min-width: 44px; }
 
-/* ══ Home dashboard: hero · Up Next · Trending rows ══════════════════════ */
+/* ══ Home dashboard: hero · Continue · ratings · social · trending/upcoming charts ══ */
 .dash-hero-inner { padding: 12px 0 6px; text-align: center; }
 .dash-hero-title { font-size: clamp(1.6rem, 4vw, 2.3rem); font-weight: 800; letter-spacing: -0.02em; margin: 0; color: var(--text-primary); text-wrap: balance; }
 .dash-hero-sub { color: var(--text-muted); font-size: 1.02rem; margin: 10px auto 0; max-width: 60ch; }
-.dash-hero-cta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px; justify-content: center; }
+.dash-hero-cta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 14px; justify-content: center; }
+/* Library counts stand in for a second headline stat block - centered, same
+   pill used on the profile page, so it reads as one consistent component
+   rather than a one-off dashboard widget. */
+.dash-hero-counts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 18px 0 0; }
 
 .dash-row { margin: 30px 0; }
 .dash-row-title { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 14px; }
 .dash-row[data-cat] .dash-row-title::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 9px; vertical-align: middle; background: var(--accent-light); }
+.dash-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.dash-section-head .dash-row-title { margin-bottom: 0; }
+.dash-row-link { font-size: 0.82rem; font-weight: 600; color: var(--text-muted); text-decoration: none; }
+.dash-row-link:hover { color: var(--accent-light); }
 .dash-scroller { display: grid; grid-auto-flow: column; grid-auto-columns: 150px; gap: 14px; overflow-x: auto; padding-bottom: 10px; scroll-snap-type: x proximity; }
 
 .dash-card { display: block; text-decoration: none; scroll-snap-align: start; }
+.dash-card:focus-visible { outline: none; }
+.dash-card:focus-visible .dash-card-poster { outline: 2px solid var(--accent-light); outline-offset: 3px; }
 .dash-card-poster { position: relative; width: 150px; aspect-ratio: 3 / 4; border-radius: var(--radius-md); overflow: hidden; background: var(--bg-deep); border: 1px solid var(--border-subtle); }
 .dash-card-poster img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.2s ease; }
 .dash-card:hover .dash-card-poster img { transform: scale(1.04); }
 .dash-card:hover .dash-card-poster { border-color: var(--accent); }
 .dash-card-name { margin-top: 7px; font-size: 0.82rem; font-weight: 600; color: var(--text-secondary); line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 
+/* Continue: a plain card like everything else on the site - no colour-coded
+   side stripe. The category badge already says what it is. */
 .dash-upnext { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
 .dash-upnext-card { display: flex; gap: 14px; padding: 12px; border-radius: var(--radius-lg); background: var(--bg-card); border: 1px solid var(--border-subtle); }
 .dash-upnext-poster { flex-shrink: 0; width: 66px; aspect-ratio: 3 / 4; border-radius: 8px; overflow: hidden; background: var(--bg-deep); }
 .dash-upnext-poster img { width: 100%; height: 100%; object-fit: cover; }
-.dash-upnext-info { display: flex; flex-direction: column; justify-content: center; gap: 9px; min-width: 0; flex: 1; }
-.dash-upnext-name { font-weight: 700; font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-upnext-info { display: flex; flex-direction: column; justify-content: center; gap: 7px; min-width: 0; flex: 1; }
+.dash-upnext-info > .cl-cat-badge { align-self: flex-start; }
+.dash-upnext-name { font-weight: 700; font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); text-decoration: none; }
+.dash-upnext-name:hover { color: var(--accent-light); }
+.dash-upnext-status { font-size: 0.8rem; color: var(--text-muted); }
 .dash-upnext-prog { display: flex; align-items: center; gap: 8px; }
 .dash-plus { align-self: flex-start; }
 .dash-empty { color: var(--text-muted); text-align: center; padding: 40px; }
+
+/* ── Social: similar-taste and friends'-activity side by side, each optional -
+   the section itself never renders when there is nothing in either. */
+.dash-social { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.dash-social-panel:only-child { grid-column: 1 / -1; }
+.dash-social-h { font-size: 0.85rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 12px; }
+.dash-social-panel .pf-people { grid-template-columns: 1fr; }
+.dash-social-panel .activity-item:not(:last-child) { margin-bottom: 2px; }
+
+/* ── Trending / Upcoming: All/Movies/Shows/Anime/Games filter tabs above one
+   poster row (same shape as Recent ratings) - same idiom the profile page
+   uses for "Currently into"/"Top 10", but keyed off the page-level --accent
+   token (already neutral by default via .dash-row[data-cat]) instead of
+   --pf-accent, so "All" never defaults to blue. */
+.dash-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 14px; }
+.dash-tab {
+    padding: 5px 14px; border: 1px solid var(--border-subtle); border-radius: var(--radius-pill);
+    background: transparent; color: var(--text-muted); font-family: inherit;
+    font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: color 0.15s, border-color 0.15s;
+}
+.dash-tab:hover { color: var(--text-secondary); border-color: var(--border); }
+.dash-tab.active { color: var(--accent-light); border-color: var(--accent-border); }
+.dash-tab:focus-visible { outline: 2px solid var(--accent-light); outline-offset: 2px; }
+
+@media (max-width: 720px) {
+    .dash-social { grid-template-columns: 1fr; gap: 20px; }
+}
 
 @media (max-width: 600px) {
     .dash-scroller { grid-auto-columns: 120px; }
@@ -4576,6 +4801,8 @@ body.gsearch-open { overflow: hidden; }
 :root[data-theme="light"] .footer-col h4 { color: var(--text-secondary); }
 :root[data-theme="light"] .footer-col ul li a,
 :root[data-theme="light"] .footer-bottom,
+:root[data-theme="light"] .footer-brand p,
+:root[data-theme="light"] .footer-igdb-text,
 :root[data-theme="light"] .footer-bottom-links a { color: var(--text-muted); }
 /* The IGDB attribution stays a dark card (its text is light) - good on both. */
 
@@ -4584,7 +4811,7 @@ body.gsearch-open { overflow: hidden; }
 .year-chip { padding: 6px 14px; border-radius: var(--radius-pill); border: 1px solid var(--border-subtle); background: var(--bg-card); color: var(--text-secondary); font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: var(--transition-fast); }
 .year-chip:hover { border-color: var(--accent-border); color: var(--text-primary); }
 .year-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-body[data-page="games"] .year-chip.active { color: #fff; }
+body[data-page="games"] .year-chip.active { color: var(--cat-game-ink); }
 
 .stats-loading, .stats-empty { text-align: center; padding: 60px 20px; color: var(--text-muted); }
 .stats-empty p { margin-bottom: 8px; font-size: 1.05rem; color: var(--text-secondary); }
@@ -4663,7 +4890,7 @@ body[data-page="games"] .year-chip.active { color: #fff; }
 .cal-chip { padding: 6px 14px; border-radius: var(--radius-pill); border: 1px solid var(--border-subtle); background: var(--bg-card); color: var(--text-secondary); font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: var(--transition-fast); }
 .cal-chip:hover { border-color: var(--accent-border); color: var(--text-primary); }
 .cal-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-body[data-page="games"] .cal-chip.active { color: #fff; }
+body[data-page="games"] .cal-chip.active { color: var(--cat-game-ink); }
 
 .cal-watchlist { margin-bottom: 26px; }
 .cal-month { margin-bottom: 26px; }
@@ -4855,6 +5082,13 @@ body.imp-open { overflow: hidden; }
     .data-export { justify-content: space-between; }
     .data-export .filter-select { flex: 1; }
 }
+
+/* Danger zone: same data-tools rhythm, tinted red so it reads as a different
+   kind of action from Import/Export above it rather than just more buttons. */
+.danger-zone { border-top-color: var(--red-dim); }
+.danger-zone-h { color: var(--red-light); }
+.danger-zone .data-tools-note { color: var(--text-muted); }
+.danger-zone .data-tools-note strong { color: var(--text-secondary); }
 
 /* ══ AURORA - animated gradient-blob atmosphere ═════════════════════════════
    Moving luminous light in the brand's own colours (the four media hues), used
@@ -5119,6 +5353,10 @@ body[data-page="games"]  { --au-1: #f59e0b; --au-2: #f59e0b; --au-3: #f59e0b; }
 .profile-section[data-accent="series"] { --pf-accent: var(--cat-series); --pf-accent-dim: var(--cat-series-dim); }
 .profile-section[data-accent="anime"]  { --pf-accent: var(--cat-anime);  --pf-accent-dim: var(--cat-anime-dim); }
 .profile-section[data-accent="game"]   { --pf-accent: var(--cat-game);   --pf-accent-dim: var(--cat-game-dim); }
+/* "Currently into" viewed on the All tab isn't any one category, so it takes
+   no data-accent attribute at all - without this it would fall through every
+   var(--pf-accent, var(--cat-movie)) fallback straight to blue. */
+.profile-section:not([data-accent]) { --pf-accent: var(--accent-light); --pf-accent-dim: var(--accent-dim); }
 
 /* ── Header art ───────────────────────────────────────────────────────────
    A band of the profile's own posters, heavily scrimmed so it reads as texture
@@ -5398,6 +5636,17 @@ body[data-page="games"]  { --au-1: #f59e0b; --au-2: #f59e0b; --au-3: #f59e0b; }
 .pf-swatch:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
 
 /* The editor reuses the poster row above, plus controls that only exist here. */
+/* Section head: chips + Edit/Done sit together on the right. */
+.pf-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+/* Read-only display strip - the same poster scroller as the home rows. */
+.pf-showcase .dash-scroller { grid-auto-columns: 130px; }
+.pf-showcase .dash-card-poster { width: 130px; }
+@media (max-width: 640px) {
+    .pf-showcase .dash-scroller { grid-auto-columns: 108px; }
+    .pf-showcase .dash-card-poster { width: 108px; }
+}
+
 .pf-edit-top { display: flex; flex-direction: column; gap: 10px; }
 .pf-edit-row {
     display: flex;
@@ -5408,6 +5657,10 @@ body[data-page="games"]  { --au-1: #f59e0b; --au-2: #f59e0b; --au-3: #f59e0b; }
     border-radius: var(--radius-sm);
     background: rgba(255, 255, 255, 0.02);
 }
+.pf-edit-row[draggable="true"] { cursor: grab; }
+.pf-edit-row.pf-dragging { opacity: 0.4; }
+.pf-edit-row.pf-drop-target { border-color: var(--pf-accent, var(--accent-light)); background: var(--pf-accent-dim, var(--accent-dim)); }
+.pf-drag-handle { color: var(--text-dim); font-size: 0.95rem; line-height: 1; letter-spacing: -2px; padding: 0 2px; user-select: none; }
 .pf-edit-row img { width: 34px; height: 48px; object-fit: cover; border-radius: var(--radius-sm); flex-shrink: 0; }
 .pf-edit-pos {
     width: 1.6em;
@@ -5833,7 +6086,7 @@ a.detail-deal-price:focus-visible { color: var(--green-light); text-decoration: 
 .card-quick-add:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 .card-quick-add.is-owned { background: var(--accent); border-color: var(--accent); color: #fff; }
 body[data-page="games"] .card-quick-add:hover,
-body[data-page="games"] .card-quick-add.is-owned { color: #1a1205; }
+body[data-page="games"] .card-quick-add.is-owned { color: var(--cat-game-ink); }
 
 @media (hover: none) {
     .card-quick-add { opacity: 1; transform: scale(1); }
@@ -5895,9 +6148,17 @@ body[data-page="games"] .card-quick-add.is-owned { color: #1a1205; }
 .qa-row .filter-select { flex: 1; margin: 0; min-width: 0; }
 .qa-row .score-input { width: 68px; margin: 0; }
 .qa-score-hint { font-size: 0.78rem; color: var(--text-muted); }
+/* Score row breaks the label/control pairing: the meter spans the full panel
+   width with its label sitting above it. */
+.qa-row-score { flex-direction: column; align-items: stretch; gap: 8px; }
+.qa-row-score > label { width: auto; }
+.qa-row-score .score-meter-value { font-size: 1.4rem; }
 
-.qa-actions { margin-top: 12px; }
+.qa-actions { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 .qa-actions .btn { width: 100%; }
+.qa-actions .qa-remove { background: transparent; border: 1px solid var(--red); color: var(--red-light); }
+.qa-actions .qa-remove:hover { background: var(--red-dim); }
+.qa-actions .qa-remove .btn-spinner { border-color: rgba(239, 68, 68, 0.3); border-top-color: var(--red-light); }
 
 .qa-msg { margin: 8px 0 0; font-size: 0.78rem; min-height: 0; }
 .qa-msg.is-error { color: var(--red-light); }
@@ -5924,8 +6185,55 @@ body[data-page="games"] .card-quick-add.is-owned { color: #1a1205; }
 
 .title-page { margin-bottom: 40px; }
 
-.title-page .game-detail-hero { border-radius: 16px; overflow: hidden; }
 .title-page .game-detail-body { padding: 0; }
+/* No banner on the title page any more, so the cover + title sit at the top of
+   the card instead of being pulled up over an image. */
+.title-page .game-detail-title-row { margin-top: 0; }
+
+/* ── Poster-anchored hero ──────────────────────────────────────────────────
+   The poster is the page's anchor, so it gets real size and sits in its own
+   left rail spanning both right-hand rows: title/meta on top, facts + synopsis
+   filling the column beneath. This is how a media title reads on the products
+   people already use (a poster you recognise, everything else arranged around
+   it) rather than a thumbnail wedged beside a heading. */
+.title-hero {
+    display: grid;
+    grid-template-columns: 208px minmax(0, 1fr);
+    grid-template-areas:
+        "poster head"
+        "poster detail";
+    column-gap: 32px;
+    row-gap: 14px;
+    align-items: start;
+    margin-bottom: 26px;
+}
+.title-hero-poster {
+    grid-area: poster;
+    align-self: start;
+    width: 208px;
+    height: 312px;          /* 2:3 frame; games covers (3:4) letterbox in it */
+    border-radius: 12px;
+}
+.title-hero-head { grid-area: head; min-width: 0; }
+.title-hero-detail { grid-area: detail; min-width: 0; }
+/* The synopsis and info grid already carry their own bottom margins; the last
+   one shouldn't push extra space before the library panel. */
+.title-hero-detail > :last-child { margin-bottom: 0; }
+.title-hero-head .game-detail-genres { margin-bottom: 0; }
+
+/* Phone: the poster tucks beside the title (kept recognisable, not shrunk to an
+   icon) and the details drop to a full-width column under both. */
+@media (max-width: 719px) {
+    .title-hero {
+        grid-template-columns: 116px minmax(0, 1fr);
+        grid-template-areas:
+            "poster head"
+            "detail detail";
+        column-gap: 16px;
+        row-gap: 16px;
+    }
+    .title-hero-poster { width: 116px; height: 174px; }
+}
 
 .title-page .game-detail-title {
     font-family: var(--font-display);
@@ -5967,7 +6275,9 @@ body[data-page="games"] .card-quick-add.is-owned { color: #1a1205; }
     color: var(--text-primary);
 }
 .atl-list-row { margin-bottom: 12px; }
+.atl-score-row { margin-bottom: 14px; }
 .atl-list-row label,
+.atl-score-row > label,
 .title-page .atl-field label,
 .title-page .atl-note label {
     display: block;
@@ -5981,13 +6291,21 @@ body[data-page="games"] .card-quick-add.is-owned { color: #1a1205; }
 .atl-list-row .filter-select { width: 100%; margin: 0; }
 .title-page .atl-controls {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 12px;
     align-items: end;
 }
 .title-page .atl-controls .filter-select { width: 100%; margin: 0; }
 .title-page .atl-note { margin-top: 14px; }
-.atl-msg { display: block; margin-top: 10px; font-size: 0.82rem; font-weight: 600; }
+.atl-msg { display: none; align-items: center; gap: 6px; margin-top: 10px; font-size: 0.82rem; font-weight: 600; }
+.atl-msg:empty { display: none; }
+.atl-msg.is-shown { display: flex; animation: msg-pop-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.atl-msg-icon { display: inline-flex; flex-shrink: 0; }
+@keyframes msg-pop-in {
+    from { opacity: 0; transform: translateY(-3px) scale(0.94); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) { .atl-msg.is-shown { animation: none; } }
 
 @media (max-width: 640px) {
     .title-page .atl-controls { grid-template-columns: minmax(0, 1fr); }
@@ -5999,3 +6317,174 @@ body[data-page="games"] .card-quick-add.is-owned { color: #1a1205; }
 a.detail-series-item,
 a.detail-similar-card,
 a.detail-cast-card { text-decoration: none; color: inherit; }
+
+/* Product polish: retain the category palette and existing page structure,
+   with quiet surfaces, legible controls and the same rhythm at every width. */
+html { background: var(--bg-base); color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
+.aurora { display: none; }
+button, input, select, textarea { font-family: inherit; }
+a { color: var(--accent-light); }
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent-light);
+    outline-offset: 3px;
+}
+.navbar { border-color: var(--border-subtle); border-radius: var(--radius-lg); box-shadow: none; }
+.nav-icon-btn, .nav-menu-trigger { min-width: 44px; min-height: 44px; }
+.nav-tab, .nav-link, .nav-cta { min-height: 44px; align-content: center; }
+.nav-tab.active::before { box-shadow: none; }
+.nav-menu-pop { max-width: min(320px, calc(100vw - 32px)); }
+.btn { transition: background-color .15s, border-color .15s, color .15s, opacity .15s; }
+.btn-primary, .btn-danger, .btn-success, .btn-warning { box-shadow: none; }
+.search-container .btn-primary, .search-bar .btn-primary { box-shadow: none; }
+.btn-primary, .nav-cta, .search-container .btn-primary, .search-bar .btn-primary, .pagination #nextPageBtn { background: color-mix(in srgb, var(--accent) 72%, #000); }
+body[data-page="games"] .btn-primary, body[data-page="games"] .nav-cta, body[data-page="games"] .pagination #nextPageBtn { background: var(--cat-game); color: var(--cat-game-ink); }
+.btn-success { background: #047857; }
+.modal, .update-modal, .remove-modal, .close-btn, .cl-modal-overlay, .cl-game-modal-overlay, .cl-game-modal-close-btn { backdrop-filter: none; }
+.btn:hover:not(:disabled) { transform: none; box-shadow: none; }
+.btn:not([class*="btn-"]) { background: var(--bg-deep); color: var(--text-secondary); border: 1px solid var(--border-subtle); }
+.form-input::placeholder, .form-textarea::placeholder, .form-group input::placeholder { color: var(--text-muted); }
+.page-header { text-align: left; margin: 4px 0 24px; }
+.page-header-sub { margin: 8px 0 0; }
+.page-header-title { font-size: clamp(1.6rem, 3vw, 2rem); }
+.search-container { margin-bottom: 16px; }
+.filter-section { border-color: var(--border-subtle); box-shadow: none; margin-bottom: 16px; }
+.browse-filter-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.browse-filter-field > span { font-size: .8rem; font-weight: 600; color: var(--text-muted); }
+.browse-filter-field .filter-select { width: 100%; margin: 0; min-width: 0; }
+#filterBtn[aria-expanded="true"] { border-color: var(--accent-light); color: var(--accent-light); background: var(--accent-dim); }
+.browse-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0 0 18px; min-height: 28px; }
+.browse-result-count { color: var(--text-muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
+.browse-result-count:empty { display: none; }
+.browse-tokens { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.browse-token { min-height: 44px; padding: 8px 12px; border: 1px solid var(--accent-border); border-radius: var(--radius-sm); background: var(--accent-dim); color: var(--text-primary); cursor: pointer; font-size: .8rem; overflow-wrap: anywhere; text-align: left; }
+.browse-token:hover { border-color: var(--accent-light); }
+.browse-clear { margin-left: auto; font-size: .85rem; }
+.query-state-notice { flex-basis: 100%; grid-column: 1 / -1; color: var(--text-muted); font-size: .85rem; line-height: 1.5; }
+.game-card { position: relative; min-width: 0; }
+.game-title-link { text-decoration: none; }
+.game-title-link::after { content: ''; position: absolute; inset: 0; z-index: 1; border-radius: var(--radius-md); }
+.game-title-link:focus-visible { outline: none; }
+.game-title-link:focus-visible::after { outline: 2px solid var(--accent-light); outline-offset: 4px; }
+.game-card:hover .game-image-wrapper { transform: none; box-shadow: none; }
+.game-image-wrapper { aspect-ratio: 2 / 3; border-radius: var(--radius-md); box-shadow: none; transition: border-color .15s; }
+body[data-page="games"] .game-image { object-fit: contain; object-position: center; }
+.game-title { min-height: 2.7em; margin-bottom: 0; overflow-wrap: anywhere; }
+.game-info { padding: 10px 0 0; gap: 5px; }
+.card-quick-add { z-index: 2; width: 44px; height: 44px; border-radius: var(--radius-md); background: #101722; color: #e2e8f0; }
+.card-rating { background: #101722; color: #e2e8f0; border-color: #475569; font-variant-numeric: tabular-nums; }
+.rating-scale { opacity: .75; font-size: .7rem; margin-left: 2px; }
+.skel-poster { aspect-ratio: 2 / 3; border-radius: var(--radius-md); }
+.skeleton-card { background: none; border: 0; box-shadow: none; }
+.empty-state { grid-column: 1 / -1; padding: 40px 20px; border: 1px dashed var(--border); border-radius: var(--radius-lg); background: var(--bg-deep); }
+.empty-state h2 { font-size: 1.2rem; color: var(--text-primary); margin-bottom: 8px; }
+.empty-state p { max-width: 52ch; margin: 0 auto 20px; font-size: .95rem; line-height: 1.6; color: var(--text-muted); }
+.pagination .btn { width: auto; min-width: 100px; border-radius: var(--radius-md); font-size: .9rem; padding: 10px 16px; gap: 8px; }
+.pagination .btn::before { content: none !important; }
+.gsearch-box { max-height: min(760px, 85dvh); }
+.gsearch-bar input { min-width: 0; }
+.gsearch-esc { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; }
+.gsearch-status { padding: 12px 18px; color: var(--text-muted); font-size: .85rem; line-height: 1.5; }
+.gsearch-status:empty { display: none; }
+.gsearch-results { overscroll-behavior: contain; }
+.quick-add-panel { max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; }
+.quick-add-backdrop { display: none; }
+@media (max-width: 560px) {
+    .quick-add-backdrop { display: block; position: fixed; inset: 0; z-index: 209; background: var(--bg-overlay); }
+    .quick-add-panel { z-index: 210; }
+    body.qa-sheet-open { overflow: hidden; }
+}
+.qa-close { min-width: 44px; min-height: 44px; }
+.score-slider { min-height: 44px; padding-block: 19px; }
+.score-meter-clear { min-height: 44px; min-width: 44px; border-radius: var(--radius-md); }
+.title-page .add-to-list { border-radius: var(--radius-lg); }
+.title-hero-poster { border-radius: var(--radius-md); }
+.title-hero-head, .game-detail-title, .person-name, .person-fact dd { overflow-wrap: anywhere; }
+.detail-info-grid { min-width: 0; }
+.media-tab, .status-tab, .pf-chip { min-height: 44px; }
+.media-tab { border-radius: var(--radius-md); }
+.overview-toggle { display: none; }
+.media-tab[data-media="all"]::before { background: var(--text-muted); }
+.profile-header, .profile-content, .cl-overview-header, .list-header { min-width: 0; }
+.profile-header h2, .list-header h2, .cl-overview-header h2, .cl-card h3, .cl-default-info, .activity-text { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.coll-empty-state { padding: 36px 20px; }
+.coll-item-img { aspect-ratio: 2 / 3; object-fit: cover; }
+.dash-row-link, .person-back { min-height: 44px; display: inline-flex; align-items: center; }
+.dash-card-poster { border-radius: var(--radius-md); }
+
+@media (min-width: 720px) {
+    .title-page .add-to-list:has(.atl-score-row) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px 24px; }
+    .title-page .add-to-list > h2, .title-page .atl-owned-note, .title-page .atl-note, .title-page .atl-msg { grid-column: 1 / -1; margin: 0; }
+    .title-page .atl-list-row { grid-column: 1; margin: 0; }
+    .title-page .atl-score-row { grid-column: 2; grid-row: span 2; margin: 0; }
+    .title-page .atl-controls { grid-column: 1; }
+    .profile-content { padding: 28px; }
+    .profile-avatar { width: 112px; height: 112px; }
+    .profile-avatar-section { margin-bottom: 24px; }
+}
+
+@media (max-width: 900px) {
+    .navbar { grid-template-columns: minmax(0, 1fr) auto; }
+    .nav-primary { grid-column: 1 / -1; grid-row: 2; }
+}
+@media (max-width: 600px) {
+    .navbar { display: grid; grid-template-columns: minmax(0, 1fr) 44px auto 44px; padding: 8px; gap: 4px; margin-bottom: 20px; }
+    .nav-brand { grid-area: 1 / 1; font-size: 1.05rem; }
+    .nav-right { display: contents; }
+    .nav-right > .nav-menu, .nav-right > .nav-cta { grid-area: 1 / 3; }
+    .nav-cta { padding-inline: 10px; font-size: .8rem; }
+    .nav-toggle { grid-area: 1 / 4; }
+    .navbar .nav-right > #navSearchBtn { display: inline-flex; grid-area: 1 / 2; width: 44px; height: 44px; padding: 0; justify-content: center; }
+    .navbar #navSearchBtn::after { content: none; }
+    .navbar .nav-primary, .navbar.is-open .nav-primary { display: grid; grid-area: 2 / 1 / auto / -1; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; width: 100%; margin: 6px 0 0; padding-top: 6px; border-top: 1px solid var(--border-subtle); }
+    .navbar .nav-tab { width: 100%; justify-content: center; padding: 8px 2px; font-size: .82rem; gap: 5px; }
+    .navbar.is-open #navPeopleBtn { grid-area: 3 / 1 / auto / 3; width: 100%; gap: 8px; }
+    .navbar.is-open #navPeopleBtn::after { content: 'People'; font-size: .85rem; }
+    .navbar.is-open #navThemeBtn { grid-area: 3 / 3 / auto / 5; width: 100%; gap: 8px; }
+    .navbar.is-open #navThemeBtn::after { content: 'Theme'; font-size: .85rem; }
+    .page-header { padding: 0; margin-bottom: 18px; }
+    .page-header-sub { max-width: none; line-height: 1.5; }
+    .search-container { margin-bottom: 12px; }
+    .filter-group { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 10px; }
+    .browse-filter-field .filter-select { padding-left: 10px; }
+    .browse-summary { margin-bottom: 16px; gap: 6px 10px; }
+    .browse-tokens:not(:empty) { order: 2; width: 100%; }
+    .games-grid { gap: 22px 12px; }
+    .game-info { padding: 9px 0 0; }
+    .card-quick-add { opacity: 1; transform: none; }
+    .gsearch { padding: 8px; }
+    .gsearch-box { max-height: calc(100dvh - 16px); }
+    .gsearch-bar { padding: 10px; gap: 8px; }
+    .gsearch-bar > svg { display: none; }
+    .gsearch-esc { display: inline-flex; }
+    .gsearch-status { padding: 10px 12px; }
+    .quick-add-panel { bottom: max(12px, env(safe-area-inset-bottom)); }
+    .media-tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); overflow: visible; gap: 6px; }
+    .media-tab { grid-column: span 2; min-width: 0; justify-content: center; padding-inline: 4px; gap: 4px; }
+    .media-tab:nth-last-child(-n+2) { grid-column: span 3; }
+    .media-tab .mt-count { padding-inline: 3px; }
+    #collectionOverview { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; margin-bottom: 20px; }
+    #collectionOverview .stats-title { font-size: 1rem; margin: 0; }
+    .overview-toggle { display: inline-flex; padding-inline: 10px; font-size: .8rem; }
+    #collectionOverview .overview-split { flex-basis: 100%; }
+    #collectionOverview.is-collapsed .overview-split { display: none; }
+    .container .my-games-section .status-tabs, .container .cl-acc-status-tabs { flex-wrap: wrap; padding: 6px; gap: 2px; }
+    .container .status-tab { flex: 1 1 30%; padding: 8px 6px; font-size: .8rem; min-height: 44px; border-radius: var(--radius-sm); margin: 0; }
+    .title-page .add-to-list { padding: 16px; }
+    .title-hero { column-gap: 14px; }
+    .title-hero-head .game-detail-title { font-size: 1.5rem; }
+    .title-page .game-detail-desc .desc-short { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.profile-actions .btn { white-space: normal; }
+}
+.private-notice, .pf-bio, .cl-acc-desc, .game-detail-info-value { overflow-wrap: anywhere; }
+@media (max-width: 360px) {
+    .navbar { grid-template-columns: minmax(0, 1fr) 40px auto 40px; padding-inline: 6px; gap: 2px; }
+    .nav-brand { font-size: .93rem; }
+    .nav-cta { padding-inline: 7px; }
+    .navbar .nav-right > #navSearchBtn, .nav-toggle { width: 40px; min-width: 40px; }
+    .title-hero { grid-template-columns: 96px minmax(0, 1fr); }
+    .title-hero-poster { width: 96px; height: 144px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security issue
+    url: https://github.com/Gr33nOps/medialistory-code/security/policy
+    about: Do not open a public issue for security problems. Report them privately per SECURITY.md.
+  - name: Try the live app
+    url: https://medialistory.onrender.com
+    about: Reproduce the problem on the deployed site before filing a bug.

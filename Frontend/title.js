@@ -158,10 +158,10 @@
   function descriptionHtml(item) {
     var d = item.description || '';
     if (!d) return '';
-    if (d.length > 420) {
-      return '<div class="game-detail-desc"><span class="desc-short">' + esc(d.slice(0, 420)) + '…</span>' +
+    if (d.length > 240) {
+      return '<div class="game-detail-desc"><span class="desc-short">' + esc(d.slice(0, 420)) + (d.length > 420 ? '…' : '') + '</span>' +
         '<span class="desc-full" hidden>' + esc(d) + '</span> ' +
-        '<button type="button" class="link-btn desc-toggle">Read more</button></div>';
+        '<button type="button" class="link-btn desc-toggle" aria-expanded="false">Read more</button></div>';
     }
     return '<p class="game-detail-desc">' + esc(d) + '</p>';
   }
@@ -277,11 +277,15 @@
       '<h2>' + (owned ? 'In your library' : 'Add to your library') + '</h2>' +
       (owned ? '<p class="atl-owned-note">Saved as <strong>' +
         esc(typeof statusLabel === 'function' ? statusLabel(owned.status, kind) : (owned.status || '')) + '</strong>' +
-        (owned.score ? ', rated <strong>' + esc(String(owned.score)) + '/10</strong>' : ', not rated yet') +
+        (owned.score != null ? ', rated <strong>' + esc(String(owned.score)) + '/10</strong>' : ', not rated yet') +
         '. Change it below.</p>' : '') +
       '<div class="atl-list-row">' +
         '<label for="gameListSelect">Add to list</label>' +
         '<select id="gameListSelect" class="filter-select">' + options + '</select>' +
+      '</div>' +
+      '<div class="atl-score-row">' +
+        '<label for="gameScore">Your score</label>' +
+        scoreMeterHTML('gameScore', owned && owned.score != null ? owned.score : null) +
       '</div>' +
       '<div class="atl-controls">' +
         '<div class="atl-field atl-field-status">' +
@@ -289,17 +293,6 @@
           '<select id="gameStatus" class="filter-select">' +
             (typeof statusOptions === 'function' ? statusOptions(kind, (owned && owned.status) || 'completed') : '') +
           '</select>' +
-        '</div>' +
-        '<div class="atl-field">' +
-          '<label for="gameScore">Your score (1-10)</label>' +
-          '<div class="score-input-container">' +
-            '<input type="number" id="gameScore" class="score-input" min="1" max="10" placeholder="--"' +
-              (owned && owned.score ? ' value="' + esc(String(owned.score)) + '"' : '') + '>' +
-            '<div class="score-controls">' +
-              '<button type="button" class="score-btn" id="tScoreUp" aria-label="Increase score">+</button>' +
-              '<button type="button" class="score-btn" id="tScoreDown" aria-label="Decrease score">−</button>' +
-            '</div>' +
-          '</div>' +
         '</div>' +
         '<button type="button" class="btn btn-primary atl-add" id="titleSaveBtn">' +
           (owned ? 'Save changes' : 'Add to library') + '</button>' +
@@ -331,19 +324,25 @@
       ? '<span class="detail-rating" title="Average rating">★ ' + esc(Number(item.rating).toFixed(1)) +
         '<span class="dr-sub">/5</span></span>' : '';
 
+    /* Poster-anchored two-column hero: the artwork carries the page (it is the
+       one thing a visitor recognises at a glance), title/meta sit beside it, and
+       the facts + synopsis fill the column under the title. The poster spans both
+       right-hand rows on desktop; on a phone it tucks next to the title and the
+       details drop full-width below. Everything after the hero stays full width. */
     byId('titleBody').innerHTML =
-      (hero ? '<div class="game-detail-hero"><img src="' + esc(hero) + '" alt="" class="game-detail-hero-img" loading="lazy"></div>' : '') +
       '<div class="game-detail-body">' +
-        '<div class="game-detail-title-row">' +
-          '<img src="' + esc(cover) + '" alt="' + esc(item.name) + ' cover" class="game-detail-cover" loading="lazy" onerror="this.src=\'/img/no-image.svg\'">' +
-          '<div class="game-detail-title-meta">' +
+        '<div class="title-hero">' +
+          '<img src="' + esc(cover) + '" alt="' + esc(item.name) + ' cover" class="game-detail-cover title-hero-poster" loading="lazy" onerror="this.src=\'/img/no-image.svg\'">' +
+          '<div class="title-hero-head">' +
             '<h1 class="game-detail-title">' + esc(item.name) + '</h1>' +
             '<div class="game-detail-badges">' + released + rating + '</div>' +
             genresHtml(item) +
           '</div>' +
+          '<div class="title-hero-detail">' +
+            infoGridHtml(item, kind) +
+            descriptionHtml(item) +
+          '</div>' +
         '</div>' +
-        infoGridHtml(item, kind) +
-        descriptionHtml(item) +
         libraryPanelHtml(item, kind, owned, state.lists) +
         trailerHtml(item) +
         providersHtml(item) +
@@ -381,6 +380,7 @@
         full.hidden = open;
         short.hidden = !open;
         toggle.textContent = open ? 'Read more' : 'Show less';
+        toggle.setAttribute('aria-expanded', String(!open));
       });
     }
 
@@ -396,16 +396,21 @@
       });
     }
 
-    if (typeof bindScoreInput === 'function') bindScoreInput('gameScore', 'tScoreUp', 'tScoreDown', null);
+    if (typeof bindScoreMeter === 'function') bindScoreMeter('gameScore');
     var save = byId('titleSaveBtn');
     if (save) save.addEventListener('click', saveToLibrary);
   }
 
+  var MSG_ICON_OK = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>';
+  var MSG_ICON_ERR = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5l5 5M14.5 9.5l-5 5"/></svg>';
   function showMsg(text, type) {
     var el = byId('addGameMessage');
     if (!el) return;
-    el.textContent = text;
-    el.style.color = type === 'error' ? 'var(--red-light)' : 'var(--green-light)';
+    var ok = type !== 'error';
+    el.innerHTML = '<span class="atl-msg-icon">' + (ok ? MSG_ICON_OK : MSG_ICON_ERR) + '</span><span>' + esc(text) + '</span>';
+    el.style.color = ok ? 'var(--green-light)' : 'var(--red-light)';
+    // Restart the pop-in animation even when the same message class repeats.
+    el.classList.remove('is-shown'); void el.offsetWidth; el.classList.add('is-shown');
   }
 
   async function saveToLibrary() {
@@ -416,13 +421,15 @@
     var note = byId('gameNote') ? byId('gameNote').value.trim() : '';
     var listValue = byId('gameListSelect') ? byId('gameListSelect').value : 'default';
 
-    if (raw && (!/^\d+$/.test(raw) || Number(raw) < 1 || Number(raw) > 10)) {
-      showMsg('Score must be a whole number from 1 to 10.', 'error');
+    if (raw && (!/^\d+$/.test(raw) || Number(raw) < 0 || Number(raw) > 10)) {
+      showMsg('Score must be a whole number from 0 to 10.', 'error');
       return;
     }
     var score = raw ? Number(raw) : null;
     var gameData = window.MGLQuickAdd.toGameData(state.item, state.kind);
     var owned = typeof libraryEntry === 'function' ? libraryEntry(state.ref) : null;
+    var saveBtn = byId('titleSaveBtn');
+    if (typeof setBtnLoading === 'function') setBtnLoading(saveBtn, true, owned ? 'Saving…' : 'Adding…');
 
     try {
       if (listValue === 'default' && owned && owned.id) {
@@ -470,18 +477,31 @@
       showMsg('Added to that list.', 'success');
     } catch (err) {
       showMsg('Network error. Please try again.', 'error');
+    } finally {
+      if (typeof setBtnLoading === 'function') setBtnLoading(saveBtn, false);
     }
   }
 
   function fail(message) {
     var el = byId('titleState');
     el.hidden = false;
-    el.textContent = message;
+    el.innerHTML = '<h2>Title unavailable</h2><p>' + esc(message) + '</p>' +
+      '<button type="button" class="btn btn-secondary" id="retryTitle">Try again</button>';
+    byId('retryTitle').addEventListener('click', function () { location.reload(); });
     byId('titleBody').hidden = true;
   }
 
   async function boot() {
     if (typeof ensureSession === 'function') { try { await ensureSession(); } catch (_) {} }
+
+    // Wired before the ref is even checked, so a bad or missing ref below
+    // still leaves a working way out instead of a dead "Back" link.
+    var back = byId('titleBack');
+    var cameFromApp = document.referrer && document.referrer.indexOf(location.origin) === 0;
+    if (back) {
+      back.setAttribute('href', cameFromApp ? '#' : 'dashboard.html');
+      if (cameFromApp) back.addEventListener('click', function (e) { e.preventDefault(); history.back(); });
+    }
 
     var ref = new URLSearchParams(location.search).get('ref');
     var parsed = parseRef(ref);
@@ -493,16 +513,11 @@
 
     document.body.setAttribute('data-page', cfg.page);
 
-    var back = byId('titleBack');
     if (back) {
       // Prefer real history, so Back returns to the exact grid position the
       // visitor came from rather than the top of the category.
-      var cameFromApp = document.referrer && document.referrer.indexOf(location.origin) === 0;
       back.setAttribute('href', cfg.back);
       back.textContent = cameFromApp ? 'Back' : ('Back to ' + cfg.label);
-      if (cameFromApp) {
-        back.addEventListener('click', function (e) { e.preventDefault(); history.back(); });
-      }
     }
 
     if (typeof loadLibraryIndex === 'function') { try { await loadLibraryIndex(); } catch (_) {} }

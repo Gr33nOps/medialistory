@@ -488,7 +488,7 @@
     var opts = options || {};
     var overlay = document.getElementById(id);
     if (!overlay) return;
-    var dialog = overlay.querySelector('.modal-content') || overlay;
+    var dialog = overlay.querySelector('.modal-content, .update-modal-content, .remove-modal-content, .cl-modal-box, .cl-game-modal-box') || overlay;
     var titleId = opts.titleId || (dialog.querySelector('[id$="Title"], h2, h3') || {}).id;
 
     if (modalState && modalState.id !== id) closeModal(modalState.id);
@@ -499,7 +499,7 @@
     overlay.setAttribute('aria-modal', 'true');
     if (titleId) overlay.setAttribute('aria-labelledby', titleId);
 
-    dialog.setAttribute('role', 'document');
+    if (dialog !== overlay) dialog.setAttribute('role', 'document');
 
     modalState = {
       id: id,
@@ -639,6 +639,11 @@
     logoutToAuth();
   }
 
+  var TOAST_ICON = {
+    success: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>',
+    error:   '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5l5 5M14.5 9.5l-5 5"/></svg>',
+    info:    '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r="0.25" fill="currentColor" stroke-width="1.5"/></svg>'
+  };
   function toast(message, type) {
     var kind = type || 'info';
     var host = document.getElementById('toastHost');
@@ -651,7 +656,9 @@
     }
     var el = document.createElement('div');
     el.className = 'toast toast-' + kind;
-    el.textContent = String(message || '');
+    el.innerHTML = '<span class="toast-icon">' + (TOAST_ICON[kind] || TOAST_ICON.info) + '</span>' +
+      '<span class="toast-text"></span>';
+    el.querySelector('.toast-text').textContent = String(message || '');
     host.appendChild(el);
     setTimeout(function () {
       el.classList.add('toast-out');
@@ -717,6 +724,110 @@
     input.addEventListener('input', function () {
       var v = String(input.value).replace(/[^0-9]/g, '');
       input.value = v ? String(Math.min(10, Math.max(1, parseInt(v, 10)))) : '';
+    });
+  }
+
+  // ── Score meter (0–10, a draggable bar like a volume slider) ────────────
+  // One thumb you drag or tap-to-jump, rather than eleven small tap targets -
+  // the old dot row read as a cramped cluster on a phone. Keeps the same
+  // hidden <input> so existing submit code reads `.value` unchanged; empty
+  // value = "No score", 0 = a real "Trash" rating at the far left. Used by
+  // the title page, quick-add and the library update dialogs so scoring
+  // feels the same app-wide.
+  var SCORE_WORDS = ['Trash', 'Awful', 'Bad', 'Rough', 'Meh', 'Mid', 'Decent', 'Solid', 'Fire', 'Elite', 'Peak'];
+
+  function scoreMeterHTML(id, value) {
+    var v = (value === 0 || (value != null && value !== '')) ? Number(value) : null;
+    if (v != null) v = Math.min(10, Math.max(0, Math.round(v)));
+    var pct = (v == null ? 0 : v * 10);
+    // Positioned at the exact percentage each value sits at (i*10%), not laid
+    // out with flex space-between - that spaced 9 ticks across 8 gaps, which
+    // put them at 0/12.5/25...100% instead of on the 10 points the thumb
+    // actually stops at.
+    var ticks = '';
+    for (var i = 1; i < 10; i++) ticks += '<span class="score-slider-tick" style="left:' + (i * 10) + '%"></span>';
+    return '<div class="score-meter' + (v == null ? ' is-empty' : '') + '" data-score-meter="' + id + '">' +
+        '<div class="score-meter-head">' +
+          '<span class="score-meter-value">' + (v == null ? '–' : v) + '</span>' +
+          '<span class="score-meter-word">' + (v == null ? 'No score' : SCORE_WORDS[v]) + '</span>' +
+          '<button type="button" class="score-meter-clear"' + (v == null ? ' hidden' : '') + '>Clear</button>' +
+        '</div>' +
+        '<div class="score-slider" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="10"' +
+          ' aria-valuenow="' + (v == null ? 0 : v) + '" aria-valuetext="' + (v == null ? 'No score selected' : v + ' out of 10') + '" aria-label="Score, 0 to 10">' +
+          '<div class="score-slider-track">' +
+            '<span class="score-slider-fill" style="width:' + pct + '%"></span>' +
+            '<span class="score-slider-ticks" aria-hidden="true">' + ticks + '</span>' +
+            '<span class="score-slider-thumb" style="left:' + pct + '%"></span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="score-meter-scale"><span>0 · Trash</span><span>10 · Peak</span></div>' +
+        '<input type="hidden" id="' + id + '"' + (v == null ? '' : ' value="' + v + '"') + '>' +
+      '</div>';
+  }
+
+  function bindScoreMeter(id) {
+    var input = document.getElementById(id);
+    if (!input) return;
+    var meter = input.closest('.score-meter') || document.querySelector('[data-score-meter="' + id + '"]');
+    if (!meter) return;
+    var slider = meter.querySelector('.score-slider');
+    var track  = meter.querySelector('.score-slider-track');
+
+    function render(v) {
+      v = (v === 0 || (v != null && v !== '')) ? Number(v) : null;
+      input.value = (v == null) ? '' : String(v);
+      meter.classList.toggle('is-empty', v == null);
+      meter.querySelector('.score-meter-value').textContent = (v == null) ? '–' : v;
+      meter.querySelector('.score-meter-word').textContent = (v == null) ? 'No score' : SCORE_WORDS[v];
+      var clr = meter.querySelector('.score-meter-clear'); if (clr) clr.hidden = (v == null);
+      var pct = (v == null ? 0 : v * 10);
+      meter.querySelector('.score-slider-fill').style.width = pct + '%';
+      meter.querySelector('.score-slider-thumb').style.left = pct + '%';
+      slider.setAttribute('aria-valuenow', v == null ? 0 : v);
+      slider.setAttribute('aria-valuetext', v == null ? 'No score selected' : v + ' out of 10');
+    }
+    meter._renderScore = render;
+    if (meter.dataset.bound) return; // fresh markup each open, but guard reuse
+    meter.dataset.bound = '1';
+
+    function valueFromClientX(clientX) {
+      var rect = track.getBoundingClientRect();
+      var pct = rect.width ? (clientX - rect.left) / rect.width : 0;
+      return Math.round(Math.min(1, Math.max(0, pct)) * 10);
+    }
+
+    var dragging = false;
+    slider.addEventListener('pointerdown', function (e) {
+      if (e.button != null && e.button !== 0) return;
+      dragging = true;
+      slider.classList.add('dragging');
+      slider.focus();
+      try { slider.setPointerCapture(e.pointerId); } catch (_) {}
+      render(valueFromClientX(e.clientX));
+      e.preventDefault();
+    });
+    slider.addEventListener('pointermove', function (e) {
+      if (!dragging) return;
+      render(valueFromClientX(e.clientX));
+    });
+    function endDrag(e) {
+      if (!dragging) return;
+      dragging = false;
+      slider.classList.remove('dragging');
+      try { slider.releasePointerCapture(e.pointerId); } catch (_) {}
+    }
+    slider.addEventListener('pointerup', endDrag);
+    slider.addEventListener('pointercancel', endDrag);
+
+    var clr = meter.querySelector('.score-meter-clear');
+    if (clr) clr.addEventListener('click', function () { render(null); });
+
+    slider.addEventListener('keydown', function (e) {
+      var cur = input.value === '' ? null : Number(input.value);
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { e.preventDefault(); render(cur == null ? 0 : Math.max(0, cur - 1)); }
+      else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { e.preventDefault(); render(cur == null ? 0 : Math.min(10, cur + 1)); }
+      else if (e.key === 'Home') { e.preventDefault(); render(0); }
+      else if (e.key === 'End') { e.preventDefault(); render(10); }
     });
   }
 
@@ -825,12 +936,28 @@
         profileBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
       });
       document.addEventListener('click', function (e) { if (!menuWrap.contains(e.target)) closeMenu(); });
-      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
+      menuWrap.addEventListener('keydown', function (e) {
+        var items = Array.from(profileMenu.querySelectorAll('[role="menuitem"]'));
+        if (e.key === 'Escape') { closeMenu(); profileBtn.focus(); }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          menuWrap.classList.add('open');
+          profileBtn.setAttribute('aria-expanded', 'true');
+          var index = items.indexOf(document.activeElement);
+          var next = index < 0 ? (e.key === 'ArrowDown' ? 0 : items.length - 1)
+            : (index + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
+          if (items[next]) items[next].focus();
+        }
+      });
+      menuWrap.addEventListener('focusout', function (e) { if (!menuWrap.contains(e.relatedTarget)) closeMenu(); });
     }
 
     // Mobile drawer toggle (hamburger opens category tabs + user links).
     var toggle = document.getElementById('navToggle');
     if (toggle) {
+      el.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && el.classList.contains('is-open')) { toggle.click(); toggle.focus(); }
+      });
       toggle.addEventListener('click', function () {
         var open = el.classList.toggle('is-open');
         toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -889,22 +1016,46 @@
     overlay.className = 'gsearch';
     overlay.hidden = true;
     overlay.innerHTML =
-      '<div class="gsearch-box" role="dialog" aria-label="Search">' +
+      '<div class="gsearch-box" role="dialog" aria-modal="true" aria-label="Search">' +
         '<div class="gsearch-bar">' +
           '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>' +
-          '<input id="gsearchInput" type="text" placeholder="Search movies, shows, anime, games…" autocomplete="off" aria-label="Search all media" aria-controls="gsearchResults">' +
-          '<button type="button" class="gsearch-esc" id="gsearchClose" aria-label="Close search">Esc</button>' +
+          '<input id="gsearchInput" type="search" role="combobox" aria-expanded="true" aria-autocomplete="list" enterkeyhint="search" placeholder="Search all media…" autocomplete="off" aria-label="Search all media" aria-controls="gsearchResults">' +
+          '<button type="button" class="gsearch-esc" id="gsearchClose" aria-label="Close search" title="Close search (Esc)">Close</button>' +
         '</div>' +
-        '<div id="gsearchResults" class="gsearch-results" role="listbox"></div>' +
+        '<p id="gsearchStatus" class="gsearch-status" role="status" aria-live="polite"></p>' +
+        '<div id="gsearchResults" class="gsearch-results" role="listbox" aria-label="Search results"></div>' +
       '</div>';
     document.body.appendChild(overlay);
 
     var input = overlay.querySelector('#gsearchInput');
     var resultsEl = overlay.querySelector('#gsearchResults');
     var timer = null, activeIndex = -1, seq = 0;
+    var returnFocus = null;
+    var searchStatus = overlay.querySelector('#gsearchStatus');
 
-    function open() { overlay.hidden = false; document.body.classList.add('gsearch-open'); setTimeout(function () { input.focus(); }, 30); }
-    function close() { overlay.hidden = true; document.body.classList.remove('gsearch-open'); input.value = ''; resultsEl.innerHTML = ''; activeIndex = -1; }
+    function open() {
+      returnFocus = document.activeElement;
+      overlay.hidden = false;
+      document.body.classList.add('gsearch-open');
+      searchStatus.textContent = 'Find a movie, series, anime or game. Type at least 2 characters.';
+      input.focus();
+    }
+    function close() {
+      ++seq; clearTimeout(timer);
+      overlay.hidden = true;
+      document.body.classList.remove('gsearch-open');
+      input.value = ''; resultsEl.innerHTML = ''; activeIndex = -1;
+      input.removeAttribute('aria-activedescendant');
+      if (returnFocus && returnFocus.isConnected) returnFocus.focus();
+    }
+    overlay.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+      if (e.key !== 'Tab') return;
+      var focusable = getFocusable(overlay);
+      var first = focusable[0], last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
 
     overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) close(); });
     overlay.querySelector('#gsearchClose').addEventListener('click', close);
@@ -922,12 +1073,13 @@
     }
 
     async function doSearch(q) {
-      if (q.length < 2) { resultsEl.innerHTML = '<div class="gsearch-hint">Type at least 2 characters to search.</div>'; return; }
       var mine = ++seq;
-      resultsEl.innerHTML = '<div class="gsearch-hint">Searching…</div>';
+      if (q.length < 2) { resultsEl.innerHTML = ''; searchStatus.textContent = 'Type at least 2 characters to search.'; return; }
+      resultsEl.innerHTML = '';
+      searchStatus.textContent = 'Searching…';
       var res = await Promise.all(GROUPS.map(function (g) {
         return apiFetch(g.ep, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ search: q, limit: 6 }) })
-          .then(function (r) { return r.ok ? r.json() : []; }).catch(function () { return []; });
+          .then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
       }));
       if (mine !== seq) return; // a newer query superseded this one
       var html = '', idx = 0;
@@ -938,7 +1090,7 @@
         html += '<div class="gsearch-group"><div class="gsearch-group-h">' + esc(g.label) + '</div>';
         items.forEach(function (it) {
           var year = it.released ? (' · ' + new Date(it.released).getFullYear()) : '';
-          html += '<a class="gsearch-item" data-idx="' + (idx++) + '" role="option" href="title.html?ref=' + encodeURIComponent(it.id) + '">' +
+          html += '<a class="gsearch-item" id="gsearch-option-' + idx + '" data-idx="' + (idx++) + '" role="option" aria-selected="false" href="title.html?ref=' + encodeURIComponent(it.id) + '">' +
             '<img src="' + esc(it.background_image || '/img/no-image.svg') + '" alt="" loading="lazy" onerror="this.src=\'/img/no-image.svg\'">' +
             '<span class="gsearch-item-txt"><span class="gsearch-item-name">' + esc(it.name) + '</span>' +
             '<span class="gsearch-item-meta">' + single + esc(year) + '</span></span>' +
@@ -946,17 +1098,25 @@
         });
         html += '</div>';
       });
-      resultsEl.innerHTML = html || '<div class="gsearch-hint">No matches for “' + esc(q) + '”.</div>';
+      resultsEl.innerHTML = html;
+      var failed = GROUPS.filter(function (_, i) { return res[i] === null; }).map(function (g) { return g.label; });
+      searchStatus.textContent = (idx ? idx + ' matches for “' + q + '”.' : failed.length === GROUPS.length ? 'Search is temporarily unavailable.' : 'No matches for “' + q + '”. Try another title.') +
+        (failed.length ? ' Could not search ' + failed.join(', ') + '. Try again shortly.' : '');
       activeIndex = -1;
     }
 
     function highlight(items) {
-      items.forEach(function (el, i) { el.classList.toggle('active', i === activeIndex); });
+      items.forEach(function (el, i) { el.classList.toggle('active', i === activeIndex); el.setAttribute('aria-selected', String(i === activeIndex)); });
+      if (items[activeIndex]) input.setAttribute('aria-activedescendant', items[activeIndex].id);
       if (items[activeIndex]) items[activeIndex].scrollIntoView({ block: 'nearest' });
     }
 
     input.addEventListener('input', function () {
       clearTimeout(timer);
+      ++seq;
+      activeIndex = -1;
+      input.removeAttribute('aria-activedescendant');
+      resultsEl.innerHTML = '';
       var q = input.value.trim();
       timer = setTimeout(function () { doSearch(q); }, 300);
     });
@@ -965,7 +1125,6 @@
       if (e.key === 'ArrowDown') { e.preventDefault(); activeIndex = Math.min(activeIndex + 1, items.length - 1); highlight(items); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); activeIndex = Math.max(activeIndex - 1, 0); highlight(items); }
       else if (e.key === 'Enter') { var t = items[activeIndex] || items[0]; if (t) window.location.href = t.getAttribute('href'); }
-      else if (e.key === 'Escape') { close(); }
     });
     document.addEventListener('keydown', function (e) {
       if (!overlay.hidden) return;
@@ -1021,6 +1180,8 @@
           '<a href="about.html">About</a>' +
           '<a href="privacy.html">Privacy Policy</a>' +
           '<a href="terms.html">Terms of Service</a>' +
+          '<a href="https://github.com/Gr33nOps" target="_blank" rel="noopener noreferrer">GitHub</a>' +
+          '<a href="https://ko-fi.com/zain021xd" target="_blank" rel="noopener noreferrer">Support</a>' +
         '</div>' +
       '</div>';
     host.appendChild(f);
@@ -1613,7 +1774,43 @@
   global.mediaTypeLabel = mediaTypeLabel;
   global.statusLabel = statusLabel;
   global.statusOptions = statusOptions;
+  // Shared button-loading state: spinner + text swap while an action is in
+  // flight, restored exactly afterwards. One helper so every Save/Add/Delete
+  // button in the app gets the same feedback instead of each screen inventing
+  // its own "disable and rewrite textContent" pattern.
+  function setBtnLoading(btn, loading, label) {
+    if (!btn) return;
+    if (loading) {
+      if (btn.dataset.idleHtml == null) btn.dataset.idleHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.classList.add('is-loading');
+      btn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span><span>' + (label || 'Working…') + '</span>';
+    } else {
+      btn.disabled = false;
+      btn.classList.remove('is-loading');
+      if (btn.dataset.idleHtml != null) { btn.innerHTML = btn.dataset.idleHtml; delete btn.dataset.idleHtml; }
+    }
+  }
+  global.setBtnLoading = setBtnLoading;
+
   global.bindScoreInput = bindScoreInput;
+  global.scoreMeterHTML = scoreMeterHTML;
+  global.bindScoreMeter = bindScoreMeter;
+  // n -> "Fire" (0 = Trash .. 10 = Peak), or '' for no score. Shared with every
+  // badge that shows a saved score, so the same vocabulary reads everywhere.
+  global.scoreWord = function (n) {
+    if (n == null || n === '') return '';
+    var i = Math.round(Number(n));
+    return (i >= 0 && i <= 10) ? SCORE_WORDS[i] : '';
+  };
+  // The number + word badge shown on collection rows (coll-score-badge). One
+  // place for the markup so every list renders a saved score the same way.
+  global.scoreBadgeHTML = function (score) {
+    if (score == null || score === '') return '<div class="coll-score-badge is-empty">–</div>';
+    var word = global.scoreWord(score);
+    return '<div class="coll-score-badge"><span class="csb-num">' + score + '</span>' +
+      (word ? '<span class="csb-word">' + word + '</span>' : '') + '</div>';
+  };
   global.MEDIA_STATUS_KEYS = STATUS_KEYS;
 })(typeof window !== 'undefined' ? window : globalThis);
 
@@ -1667,12 +1864,16 @@ function applyQueryStateNotice(state) {
         else filterBtn.removeAttribute('title');
     }
 
-    /* The sentence that used to sit here said out loud what the controls
-       already show: a greyed-out Sort next to a search box is self-explanatory,
-       and the reason is still one hover away in the tooltip. Printing it beside
-       every search was a banner nobody needed twice. */
-    notice.hidden = true;
-    notice.innerHTML = '';
+    // Touch users cannot hover a disabled control to learn why it is locked.
+    // Keep the explanation visible until the search is cleared.
+    notice.hidden = !(sortDead || filtersOff);
+    notice.textContent = filtersOff
+      ? 'Search uses best match. Clear your search to use filters and sorting.'
+      : sortDead ? 'Search results are ordered by best match. Clear your search to sort.' : '';
+    var filterPanel = document.getElementById('filterSection');
+    if (filtersOff && filterPanel) filterPanel.classList.add('hidden');
+    var filterTokens = document.querySelector('.browse-tokens');
+    if (filterTokens) filterTokens.hidden = !!filtersOff;
 }
 
 /* Reads the two headers the list endpoints set. Absent headers mean the caller
@@ -1718,13 +1919,12 @@ function setLibraryEntry(ref, entry) {
     else delete __libraryIndex[ref];
 }
 
-/* The badge on a browse card. Kept here so every category draws the same one. */
+/* Ownership on a browse card is shown by the quick-add control turning into a
+   tick, so the separate score chip in the corner was saying the same thing
+   twice and cluttering the artwork. Kept as a no-op so existing callers and the
+   refresh below stay valid. */
 function ownedBadgeHtml(ref) {
-    var entry = libraryEntry(ref);
-    if (!entry) return '';
-    var label = entry.score ? ('\u2713 ' + entry.score) : '\u2713';
-    var title = entry.score ? ('In your library, rated ' + entry.score) : 'In your library';
-    return '<span class="card-owned" title="' + esc(title) + '" aria-label="' + esc(title) + '">' + esc(label) + '</span>';
+    return '';
 }
 
 /* Update one card in place after an add or edit, so the badge appears without
