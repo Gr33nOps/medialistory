@@ -11,6 +11,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap">
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="experience.css">
     <!-- seo:start -->
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="mask-icon" href="/favicon.svg" color="#3b82f6">
@@ -20,11 +21,11 @@
 <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
     <div id="main-content" tabindex="-1" class="container">
-        <nav class="navbar" id="appNav" data-active="profile" data-brand="MediaListory" data-page-title="My Profile" data-page-sub="Your stats, activity, and account settings."></nav>
+        <nav class="navbar" id="appNav" data-active="profile" data-brand="MediaListory" data-page-title="My Profile" data-page-sub="A little about you. A lot about what you love."></nav>
         <h1 class="sr-only">My profile</h1>
 
         <div class="profile-section">
-            <div id="profileDisplay" class="profile-content">
+            <div id="profileDisplay" class="profile-content"><div class="profile-intro"><p class="eyebrow">Your corner of the story</p><h2 id="profileGreeting">Your profile</h2><p id="profileBio" class="pf-bio" hidden></p><a id="publicProfileLink" class="profile-public-link" href="friends.html">View public profile ↗</a></div>
                 <div class="profile-avatar-section">
                     <div class="profile-avatar">
                         <img id="displayAvatar" src="" alt="Profile Avatar" onerror="this.src='https://ui-avatars.com/api/?name=User&size=200&background=3b82f6&color=fff&bold=true'">
@@ -70,8 +71,7 @@
                     <button id="changePasswordBtn" class="btn btn-secondary">Change Password</button>
                 </div>
 
-                <div class="data-tools">
-                    <h3 class="data-tools-h">Your data</h3>
+                <details class="data-tools"><summary>Import, export &amp; backup <span>Keep your stories with you</span></summary>
                     <div class="data-tools-row">
                         <button id="importDataBtn" class="btn btn-secondary" type="button">Import a list</button>
                         <div class="data-export">
@@ -87,17 +87,14 @@
                         </div>
                         <button id="backupDataBtn" class="btn btn-secondary" type="button">Download full backup</button>
                     </div>
-                    <p class="data-tools-note">Export one category (e.g. just your movies) to move it to another site, or download a full backup of your whole account: collection and lists. To restore a backup, use <strong>Import</strong> with Auto-detect.</p>
-                </div>
+                    <p class="data-tools-note">Export one category (e.g. just your movies) to move it to another site, or download a full backup of your whole account: collection and lists. To restore a backup, use <strong>Import</strong> with Auto-detect.</p></details>
 
-                <div class="data-tools danger-zone">
-                    <h3 class="data-tools-h danger-zone-h">Danger zone</h3>
+                <details class="data-tools danger-zone"><summary>Account management <span>Clear data or delete your account</span></summary>
                     <div class="data-tools-row">
                         <button id="clearDataBtn" class="btn btn-danger" type="button">Clear all data</button>
                         <button id="deleteAccountBtn" class="btn btn-danger" type="button">Delete account</button>
                     </div>
-                    <p class="data-tools-note">Both are permanent. <strong>Clear all data</strong> empties your collection and custom lists but keeps your account and profile. <strong>Delete account</strong> removes everything - your collection, lists, follows, and profile - and signs you out for good. Download a backup above first if you might want this again.</p>
-                </div>
+                    <p class="data-tools-note">Both are permanent. <strong>Clear all data</strong> empties your collection and custom lists but keeps your account and profile. <strong>Delete account</strong> removes everything - your collection, lists, follows, and profile - and signs you out for good. Download a backup above first if you might want this again.</p></details>
             </div>
 
             <div id="clearDataModal" class="cl-modal-overlay">
@@ -283,6 +280,7 @@
     </div>
 
     <script src="common.js"></script>
+    <script src="experience.js"></script>
     <script src="profile.js"></script>
     <script src="import.js"></script>
 </body>

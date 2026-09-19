@@ -128,6 +128,14 @@ function clearProfileSkeleton() {
 }
 
 function displayProfile(user) {
+    var greeting = document.getElementById('profileGreeting');
+    if (greeting) greeting.textContent = user.display_name || user.username || 'Your profile';
+    var bio = document.getElementById('profileBio');
+    if (bio) { bio.textContent = user.bio || ''; bio.hidden = !user.bio; }
+    var publicLink = document.getElementById('publicProfileLink');
+    if (publicLink) publicLink.href = 'userProfile.html?userId=' + encodeURIComponent(user.id);
+    var display = document.getElementById('profileDisplay');
+    if (display) display.parentElement.setAttribute('data-accent', ['movie', 'series', 'anime', 'game'].includes(user.accent) ? user.accent : 'movie');
     var avatarUrl = user.avatar_url ||
         'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.display_name || user.username) + '&size=200&background=3b82f6&color=fff&bold=true';
 

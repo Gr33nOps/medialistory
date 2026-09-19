@@ -11,6 +11,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap">
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="experience.css">
     <style>
         /* Category tabs, pills, and accents come from styles.css (unified). */
         .coll-item-progress { font-size: 0.72rem; color: var(--text-muted); margin-left: 8px; }
@@ -24,14 +25,15 @@
 <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
     <div id="main-content" tabindex="-1" class="container">
-        <nav class="navbar" id="appNav" data-active="list" data-brand="MediaListory" data-page-title="My Library" data-page-sub="Everything you are tracking, organized by category."></nav>
+        <nav class="navbar" id="appNav" data-active="list" data-brand="MediaListory" data-page-title="My Library" data-page-sub="Every story you save. Every world you return to."></nav>
         <h1 class="sr-only">My library</h1>
 
-        <div class="page-tabs" role="tablist" aria-label="My list sections">
-            <button type="button" class="page-tab active" role="tab" id="tabBtnCollection" data-tab="collection" aria-controls="tab-collection" aria-selected="true">Collection</button>
-            <button type="button" class="page-tab" role="tab" id="tabBtnLists" data-tab="lists" aria-controls="tab-lists" aria-selected="false" tabindex="-1">Custom Lists</button>
+        <div class="page-tabs" role="tablist" aria-label="Library sections">
+            <button type="button" class="page-tab active" role="tab" id="tabBtnCollection" data-tab="collection" aria-controls="tab-collection" aria-selected="true">My Library</button>
+            <button type="button" class="page-tab" role="tab" id="tabBtnLists" data-tab="lists" aria-controls="tab-lists" aria-selected="false" tabindex="-1">My Collections</button>
         </div>
 
+        <p class="library-guide">Your <strong>Library</strong> tracks your titles and progress. <strong>Collections</strong> bring your favourites together in lists.</p>
         <div class="media-tabs" role="tablist" aria-label="Filter by category">
             <button class="media-tab active" data-media="all" role="tab" aria-selected="true">All</button>
             <button class="media-tab" data-media="movie" role="tab" aria-selected="false">Movies</button>
@@ -57,11 +59,11 @@
 
             <div class="my-games-section">
                 <div class="list-header">
-                    <h2>Collection</h2>
+                    <div><p class="eyebrow">Your personal shelf</p><h2>Saved titles</h2></div>
                     <div class="list-header-actions">
-                        <label class="sr-only" for="myGamesSearch">Search your collection</label>
-                        <input type="text" id="myGamesSearch" class="search-input" placeholder="Search your collection…" aria-label="Search your collection">
-                        <select id="myGamesSort" class="filter-select">
+                        <label class="sr-only" for="myGamesSearch">Search your library</label>
+                        <input type="text" id="myGamesSearch" class="search-input" placeholder="Search your library…" aria-label="Search your library">
+                        <select aria-label="Sort your library" id="myGamesSort" class="filter-select">
                             <option value="recently_added">Recently Added</option>
                             <option value="name">Name (A-Z)</option>
                             <option value="name_desc">Name (Z-A)</option>
@@ -139,9 +141,9 @@
 
             <div class="my-games-section">
                 <div class="list-header">
-                    <h2>My Lists</h2>
+                    <div><p class="eyebrow">Curated by you</p><h2>My Collections</h2><p class="section-hint">Bring titles together around a mood, a theme, or your next weekend.</p></div>
                     <div class="list-header-actions">
-                        <button class="btn btn-primary" id="clNewListBtn">+ New List</button>
+                        <button class="btn btn-primary" id="clNewListBtn">+ New collection</button>
                     </div>
                 </div>
                 <div id="clAccordion" class="my-games-list"></div>
@@ -153,18 +155,18 @@
 
     <div class="cl-game-modal-overlay" id="clGameModal">
         <div class="cl-game-modal-box">
-            <button class="cl-game-modal-close-btn" id="clGameModalClose">x</button>
+            <button class="cl-game-modal-close-btn" aria-label="Close details" id="clGameModalClose">x</button>
             <div id="clGameDetails"></div>
         </div>
     </div>
 
     <div class="cl-modal-overlay" id="clListFormModal">
         <div class="cl-modal-box">
-            <button class="cl-modal-close" id="clListFormClose">x</button>
-            <h3 id="clListFormTitle">Create New List</h3>
+            <button class="cl-modal-close" aria-label="Close dialog" id="clListFormClose">x</button>
+            <h3 id="clListFormTitle">Create a collection</h3>
 
             <div class="cl-form-group">
-                <label class="cl-form-label" for="clListName">List Name *</label>
+                <label class="cl-form-label" for="clListName">Collection name *</label>
                 <input type="text" class="cl-form-input" id="clListName" maxlength="100"
                        placeholder="e.g. Halloween Picks, Best Co-op…">
                 <div class="cl-char-count" id="clListNameCount">0 / 100</div>
@@ -188,8 +190,8 @@
             <div class="cl-form-group">
                 <div class="cl-toggle-row">
                     <div>
-                        <div class="cl-toggle-label">Public list</div>
-                        <div class="cl-toggle-sub">Others can see this list on your profile</div>
+                        <div class="cl-toggle-label">Public collection</div>
+                        <div class="cl-toggle-sub">Let people discover this collection on your profile</div>
                     </div>
                     <label class="cl-toggle">
                         <input type="checkbox" id="clListPublic" checked>
@@ -199,17 +201,17 @@
             </div>
             <div class="cl-modal-actions">
                 <button class="btn btn-secondary" id="clListFormCancel">Cancel</button>
-                <button class="btn btn-primary" id="clListFormSubmit">Create List</button>
+                <button class="btn btn-primary" id="clListFormSubmit">Create collection</button>
             </div>
         </div>
     </div>
 
     <div class="cl-modal-overlay" id="clDeleteListModal">
         <div class="cl-modal-box cl-modal-box-sm">
-            <button class="cl-modal-close" id="clDeleteListClose">x</button>
+            <button class="cl-modal-close" aria-label="Close dialog" id="clDeleteListClose">x</button>
             <h3>Delete List</h3>
             <p class="cl-confirm-text">Delete <strong id="clDeleteListName">this list</strong>?
-               All games in this list will be removed. This cannot be undone.</p>
+               This removes the collection and its entries. Titles in your library stay saved. This cannot be undone.</p>
             <div class="cl-modal-actions">
                 <button class="btn btn-secondary" id="clDeleteListCancel">Cancel</button>
                 <button class="btn btn-danger btn-sm" id="clDeleteListConfirm">Delete</button>
@@ -245,7 +247,7 @@
 
     <div class="cl-modal-overlay" id="clRemoveGameModal">
         <div class="cl-modal-box cl-modal-box-sm">
-            <button class="cl-modal-close" id="clRemoveGameClose">x</button>
+            <button class="cl-modal-close" aria-label="Close dialog" id="clRemoveGameClose">x</button>
             <h3>Remove Game</h3>
             <p class="cl-confirm-text">Remove <strong id="clRemoveGameName">this game</strong> from this list?</p>
             <div class="cl-modal-actions">
@@ -258,6 +260,7 @@
     <div class="cl-toast" id="clToast" role="status" aria-live="polite"></div>
 
     <script src="common.js"></script>
+    <script src="experience.js"></script>
     <script src="library.js"></script>
 </body>
 </html>

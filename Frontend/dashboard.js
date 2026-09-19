@@ -87,7 +87,7 @@
     if (!el) return;
     if (isGuest) {
       el.innerHTML = '<div class="dash-hero-inner">' +
-        '<h2 class="dash-hero-title">Everything you watch and play, in one place</h2>' +
+        '<p class="eyebrow">One home for every obsession</p><h2 class="dash-hero-title">Great stories.<br>Your story.</h2>' +
         '<p class="dash-hero-sub">Track movies, shows, anime, and games. Rate them, follow your episode progress, and keep one library.</p>' +
         '<div class="dash-hero-cta">' +
           '<a class="btn btn-primary" href="auth.html">Create a free account</a>' +
@@ -107,9 +107,11 @@
       sub = 'Pick up where you left off, or find something new below.';
     }
     el.innerHTML = '<div class="dash-hero-inner">' +
+      '<p class="eyebrow">Your next chapter starts here</p>' +
       '<h2 class="dash-hero-title">Welcome back, ' + esc(name) + '</h2>' +
       '<p class="dash-hero-sub">' + esc(sub) + '</p>' +
       (total ? catCountsHtml(byCat) : '') +
+      '<div class="dash-hero-cta"><a class="btn btn-primary" href="library.html">Open my library <span aria-hidden="true">↗</span></a><a class="btn btn-secondary" href="library.html?tab=lists">My collections</a></div>' +
     '</div>';
   }
 

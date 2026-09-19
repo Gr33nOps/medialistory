@@ -88,8 +88,15 @@ function initPageTabs() {
             if (tab.dataset.tab === 'lists' && clLists.length === 0) {
                 clLoadLists();
             }
+            var url = new URL(window.location.href);
+            url.searchParams.set('tab', tab.dataset.tab);
+            history.replaceState(null, '', url);
+            document.dispatchEvent(new CustomEvent('librarytabchange', { detail: tab.dataset.tab }));
         });
     });
+    if (new URLSearchParams(window.location.search).get('tab') === 'lists') {
+        document.getElementById('tabBtnLists').click();
+    }
 }
 
 function initCollectionTab() {
@@ -699,7 +706,7 @@ function clRenderAccordion() {
         : clLists.filter(function (l) { return l.category === currentMediaFilter; });
 
     if (clLists.length === 0) {
-        container.innerHTML = '<div class="coll-empty-state"><div class="coll-empty-icon">No lists yet</div><p>Hit <strong>+ New List</strong> to create one.</p></div>';
+        container.innerHTML = '<div class="coll-empty-state"><div class="coll-empty-icon">Your first collection starts here</div><p>Create a collection for rainy days, movie nights, or worlds worth revisiting.</p></div>';
         return;
     }
     if (visible.length === 0) {
@@ -711,7 +718,7 @@ function clRenderAccordion() {
 
     container.querySelectorAll('.cl-acc-header').forEach(function(header) {
         header.addEventListener('click', function(e) {
-            if (e.target.closest('.btn')) return;
+            if (e.target.closest('.cl-acc-header-right')) return;
             var listId = parseInt(header.closest('.cl-acc-row').dataset.listId);
             clToggleAccordion(listId);
         });
@@ -743,9 +750,12 @@ function clRenderAccordionRow(list) {
     var count      = list.game_count || 0;
     var isExpanded = clExpandedListId === list.id;
     var catBadge   = list.category ? '<span class="cl-cat-badge" data-cat="' + list.category + '">' + CL_CAT_LABEL[list.category] + '</span>' : '';
-    return '<div class="cl-acc-row ' + (isExpanded ? 'expanded' : '') + '" data-list-id="' + list.id + '">' +
+    return '<div class="cl-acc-row ' + (isExpanded ? 'expanded' : '') + '" data-cat="' + esc(list.category || 'mixed') + '" data-list-id="' + list.id + '">' +
         '<div class="cl-acc-header">' +
-            '<div class="cl-acc-header-left">' +
+            '<button type="button" class="cl-acc-header-left cl-collection-toggle" aria-expanded="' + isExpanded + '" aria-controls="cl-acc-body-' + list.id + '">' +
+                '<span class="collection-cover" aria-hidden="true">' +
+                    ((list.cover_images || []).slice(0, 3).map(function(src) { return '<img src="' + esc(src) + '" alt="" loading="lazy" onerror="this.src=\'/img/no-image.svg\'">'; }).join('') || '<span class="collection-cover-mark">✦</span>') +
+                '</span>' +
                 '<span class="cl-acc-chevron">' + (isExpanded ? 'v' : '>') + '</span>' +
                 '<div class="cl-acc-title-group">' +
                     '<div class="cl-acc-title-row">' +
@@ -756,9 +766,9 @@ function clRenderAccordionRow(list) {
                     '</div>' +
                     (list.description ? '<div class="cl-acc-desc">' + esc(list.description) + '</div>' : '') +
                 '</div>' +
-            '</div>' +
+            '</button>' +
             '<div class="cl-acc-header-right">' +
-                '<button class="btn btn-secondary btn-sm cl-acc-edit-list-btn" data-list-id="' + list.id + '">Edit List</button>' +
+                '<button class="btn btn-secondary btn-sm cl-acc-edit-list-btn" data-list-id="' + list.id + '">Edit collection</button>' +
                 '<button class="btn btn-danger btn-sm cl-acc-delete-list-btn" data-list-id="' + list.id + '">Delete</button>' +
             '</div>' +
         '</div>' +
@@ -773,6 +783,7 @@ async function clToggleAccordion(listId) {
     var isCurrentlyExpanded = clExpandedListId === listId;
     container.querySelectorAll('.cl-acc-row').forEach(function(r) {
         r.classList.remove('expanded');
+        r.querySelector('.cl-collection-toggle').setAttribute('aria-expanded', 'false');
         r.querySelector('.cl-acc-chevron').textContent = '>';
         r.querySelector('.cl-acc-body').classList.add('hidden');
     });
@@ -783,6 +794,7 @@ async function clToggleAccordion(listId) {
 
 async function clExpandRow(row, listId, doFetch) {
     row.classList.add('expanded');
+    row.querySelector('.cl-collection-toggle').setAttribute('aria-expanded', 'true');
     row.querySelector('.cl-acc-chevron').textContent = 'v';
     var body = row.querySelector('.cl-acc-body');
     body.classList.remove('hidden');
@@ -793,7 +805,7 @@ async function clExpandRow(row, listId, doFetch) {
         try {
             var d = await clApi('GET', '/user/lists/' + listId);
             clListGames[listId] = d.list.games || [];
-        } catch (e) { body.innerHTML = '<div class="coll-empty-state"><p>Failed to load games.</p></div>'; return; }
+        } catch (e) { body.innerHTML = '<div class="coll-empty-state"><p>Could not load these titles. Close and reopen this collection to try again.</p></div>'; return; }
     }
     clRenderListBody(listId);
 }
@@ -810,11 +822,11 @@ function clRenderListBody(listId) {
     }).join('');
 
     body.innerHTML =
-        '<div class="cl-acc-toolbar">' +
+        '<div class="collection-add-hint"><span>Add a title from any browse page using its <strong>+</strong> button, then choose this collection.</span><a href="movies.html" class="btn btn-secondary btn-sm">Find titles ↗</a></div><div class="cl-acc-toolbar">' +
             '<div class="cl-acc-list-header">' +
                 '<div class="cl-acc-list-header-inputs">' +
-                    '<input type="text" class="search-input cl-acc-search" placeholder="Search games…" value="' + esc(f.search) + '">' +
-                    '<select class="filter-select cl-acc-sort">' +
+                    '<input type="text" aria-label="Search this collection" class="search-input cl-acc-search" placeholder="Search titles…" value="' + esc(f.search) + '">' +
+                    '<select aria-label="Sort this collection" class="filter-select cl-acc-sort">' +
                         '<option value="recently_added"' + (f.sort === 'recently_added' ? ' selected' : '') + '>Recently Added</option>' +
                         '<option value="name"'          + (f.sort === 'name'           ? ' selected' : '') + '>Name (A-Z)</option>' +
                         '<option value="name_desc"'     + (f.sort === 'name_desc'      ? ' selected' : '') + '>Name (Z-A)</option>' +
@@ -870,8 +882,8 @@ function clRenderAccGames(listId) {
         default:               games.sort(function(a,b) { return new Date(b.added_at||0)-new Date(a.added_at||0); }); break;
     }
     if (games.length === 0) {
-        var msg = f.search ? 'No games matching "' + f.search + '".' : f.status !== 'all' ? 'No games with status "' + (STATUS_LABEL[f.status] || f.status) + '".' : 'No games in this list yet.';
-        container.innerHTML = '<div class="coll-empty-state" style="padding:30px 20px;"><p>' + msg + '</p></div>';
+        var msg = f.search ? 'No titles matching "' + f.search + '".' : f.status !== 'all' ? 'No titles with status "' + (STATUS_LABEL[f.status] || f.status) + '".' : 'A blank page for your next obsession. Add your first title to this collection.';
+        container.innerHTML = '<div class="coll-empty-state"><p>' + esc(msg) + '</p></div>';
         return;
     }
     container.innerHTML = games.map(function(g) { return clRenderGameRow(g, listId, editMode); }).join('');
@@ -923,8 +935,8 @@ function clShowGameDetails(gameId) {
 
 function clOpenListForm(list) {
     clEditingId = list ? list.id : null;
-    document.getElementById('clListFormTitle').textContent  = list ? 'Edit List' : 'Create New List';
-    document.getElementById('clListFormSubmit').textContent = list ? 'Save Changes' : 'Create List';
+    document.getElementById('clListFormTitle').textContent  = list ? 'Edit collection' : 'Create a collection';
+    document.getElementById('clListFormSubmit').textContent = list ? 'Save Changes' : 'Create collection';
     document.getElementById('clListName').value             = list ? list.name : '';
     document.getElementById('clListDesc').value             = list ? (list.description || '') : '';
     document.getElementById('clListPublic').checked         = list ? !!list.is_public : true;
@@ -939,17 +951,17 @@ async function clSubmitListForm() {
     var desc      = document.getElementById('clListDesc').value.trim();
     var is_public = document.getElementById('clListPublic').checked;
     var category  = document.getElementById('clListCategory').value || null;
-    if (!name) { clShowToast('Please enter a list name', 'error'); return; }
+    if (!name) { clShowToast('Give your collection a name', 'error'); return; }
     var btn = document.getElementById('clListFormSubmit');
     btn.disabled = true; btn.textContent = 'Saving…';
     try {
         var body = { name: name, description: desc || null, cover_color: '#3a7bd5', is_public: is_public, category: category };
-        if (clEditingId) { await clApi('PUT',  '/user/lists/' + clEditingId, body); clShowToast('List updated!', 'success'); }
-        else             { await clApi('POST', '/user/lists',               body); clShowToast('List created!', 'success'); }
+        if (clEditingId) { await clApi('PUT',  '/user/lists/' + clEditingId, body); clShowToast('Collection updated!', 'success'); }
+        else             { await clApi('POST', '/user/lists',               body); clShowToast('Collection created!', 'success'); }
         clCloseModal('clListFormModal');
         await clLoadLists();
     } catch (e) { clShowToast(e.message, 'error'); }
-    finally { btn.disabled = false; btn.textContent = clEditingId ? 'Save Changes' : 'Create List'; }
+    finally { btn.disabled = false; btn.textContent = clEditingId ? 'Save Changes' : 'Create collection'; }
 }
 
 function clOpenDeleteModal(list) {
@@ -964,7 +976,7 @@ async function clConfirmDeleteList() {
     btn.disabled = true; btn.textContent = 'Deleting…';
     try {
         await clApi('DELETE', '/user/lists/' + _clPendingDeleteId);
-        clShowToast('List deleted', 'success');
+        clShowToast('Collection deleted', 'success');
         clCloseModal('clDeleteListModal');
         if (clExpandedListId === _clPendingDeleteId) clExpandedListId = null;
         delete clListGames[_clPendingDeleteId];
