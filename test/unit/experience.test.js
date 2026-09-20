@@ -145,3 +145,18 @@ test('profile follow prevents duplicate requests and updates immediately after s
   assert.equal(btn.disabled, false);
   dom.window.close();
 });
+
+test('title rendering treats catalog strings as text even without the shared escape helper', async () => {
+  const dom = new JSDOM(fs.readFileSync(path.join(frontend, 'title.html'), 'utf8'), {
+    url: 'http://localhost/title.html?ref=tmdb_movie_1', runScripts: 'outside-only'
+  });
+  const w = dom.window;
+  const name = '<img src=x onerror="alert(1)"> & a "story"';
+  w.apiFetch = async () => ({ ok: true, json: async () => [{ id: 'tmdb_movie_1', name, rating: 4, released: '2024-01-01', description: '<b>Plain text</b>', genres: [] }] });
+  w.eval(fs.readFileSync(path.join(frontend, 'title.js'), 'utf8'));
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(w.document.querySelector('.game-detail-title').textContent, name);
+  assert.equal(w.document.querySelector('.game-detail-title img'), null);
+  assert.equal(w.document.querySelector('.title-hero-poster').getAttribute('alt'), name + ' cover');
+  dom.window.close();
+});
