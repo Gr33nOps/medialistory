@@ -209,7 +209,7 @@ a.friend-name:hover { text-decoration: underline; text-underline-offset: 4px; }
 }
 @media (max-width: 700px) {
   body.has-mobile-dock { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
-  .mobile-dock { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; inset: auto 0 0; z-index: 90; padding: 8px 8px max(8px, env(safe-area-inset-bottom)); background: var(--bg-card); border-top: 1px solid var(--border-subtle); box-shadow: 0 -8px 25px #0002; }
+  .mobile-dock { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); position: fixed; inset: auto 0 0; z-index: 90; padding: 8px 8px max(8px, env(safe-area-inset-bottom)); background: var(--bg-card); border-top: 1px solid var(--border-subtle); box-shadow: 0 -8px 25px #0002; }
   .mobile-dock a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 52px; padding: 4px 0; border-radius: 12px; color: var(--text-muted); text-decoration: none; font-size: .65rem; font-weight: 650; }
   .mobile-dock svg { width: 21px; height: 21px; }
   .mobile-dock a[aria-current] { color: var(--text-primary); background: var(--surface-raised); }

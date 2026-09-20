@@ -20,7 +20,6 @@
     var destinations = [
       ['home', 'dashboard.html', 'Home'],
       ['library', 'library.html', 'Library'],
-      ['collections', 'library.html?tab=lists', 'Collections'],
       ['people', 'friends.html', 'People'],
       ['profile', signedIn ? 'profile.html' : 'auth.html', signedIn ? 'Profile' : 'Sign in']
     ];
@@ -33,7 +32,7 @@
     document.body.appendChild(dock);
     document.body.classList.add('has-mobile-dock');
     function markDestination(tab) {
-      var key = active === 'list' ? (tab === 'lists' ? 'collections' : 'library') : active === 'friends' ? 'people' : active;
+      var key = active === 'list' ? 'library' : active === 'friends' ? 'people' : active;
       dock.querySelectorAll('a').forEach(function(a) {
         if (a.dataset.destination === key) a.setAttribute('aria-current', 'page');
         else a.removeAttribute('aria-current');

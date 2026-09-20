@@ -88,14 +88,13 @@ async function enhancedPage(name, query = '') {
   return dom;
 }
 
-test('mobile navigation links directly to collections and marks the current destination', async () => {
+test('mobile navigation keeps one Library destination without a duplicate Collections item', async () => {
   const dom = await enhancedPage('library', '?tab=lists');
-  const link = dom.window.document.querySelector('.mobile-dock a[href="library.html?tab=lists"]');
-  assert.ok(link, 'Collections must be reachable directly');
-  assert.equal(link.getAttribute('aria-current'), 'page');
-  dom.window.document.dispatchEvent(new dom.window.CustomEvent('librarytabchange', { detail: 'collection' }));
-  assert.equal(link.hasAttribute('aria-current'), false);
-  assert.equal(dom.window.document.querySelector('.mobile-dock a[href="library.html"]').getAttribute('aria-current'), 'page');
+  const dockLinks = dom.window.document.querySelectorAll('.mobile-dock a');
+  const library = dom.window.document.querySelector('.mobile-dock a[href="library.html"]');
+  assert.equal(dockLinks.length, 4);
+  assert.equal(dom.window.document.querySelector('.mobile-dock a[href="library.html?tab=lists"]'), null);
+  assert.equal(library.getAttribute('aria-current'), 'page');
   dom.window.close();
 });
 

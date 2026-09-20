@@ -129,6 +129,8 @@ const igdb = titles.map((t, i) => ({ id: i + 1, name: t.name, first_release_date
         }
         if (route === 'library.html') {
           if (width <= 600) {
+            const categoryWidths = await page.locator('.media-tab').evaluateAll(tabs => tabs.map(tab => tab.getBoundingClientRect().width));
+            assert(Math.max(...categoryWidths) - Math.min(...categoryWidths) < 1, 'Library category buttons have equal widths');
             assert.equal(await page.locator('.overview-split').isVisible(), false);
             await page.locator('#overviewToggle').click();
             assert.equal(await page.locator('.overview-split').isVisible(), true);
