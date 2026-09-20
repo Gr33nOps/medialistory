@@ -27,15 +27,11 @@ button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation
 .library-guide { margin: -6px 0 22px; }
 .library-guide strong { color: var(--text-secondary); font-weight: 600; }
 
-/* Navigation: categories retain their coloured dots; personal spaces are visible. */
+/* Navigation: category tabs remain concise beside profile actions. */
 .navbar { padding: 12px 18px; gap: 14px; margin-bottom: 32px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 18px; }
 .nav-brand { color: var(--text-primary); letter-spacing: -.045em; }
 .nav-brand::before { content: ''; display: inline-block; width: 9px; height: 20px; border-radius: 3px; margin-right: 10px; vertical-align: -3px; background: var(--cat-movie-light); box-shadow: 4px -4px 0 var(--cat-series-light), 8px -8px 0 var(--cat-anime-light); transform: rotate(-12deg); }
 .nav-tab { border-radius: 10px; transition: background-color .2s, color .2s; }
-.nav-spaces { display: flex; align-items: center; gap: 3px; padding-right: 8px; border-right: 1px solid var(--border-subtle); }
-.space-link { display: inline-flex; gap: 6px; align-items: center; padding: 9px; min-height: 44px; color: var(--text-muted); text-decoration: none; font-size: .8rem; font-weight: 600; border-radius: 10px; }
-.space-link svg { width: 17px; height: 17px; }
-.space-link:hover, .space-link[aria-current] { background: var(--surface-raised); color: var(--text-primary); }
 .nav-menu-pop { padding: 8px; border-radius: 16px; box-shadow: var(--shadow-modal); }
 .nav-menu-item { border-radius: 9px; min-height: 44px; }
 .mobile-dock { display: none; }
@@ -46,7 +42,6 @@ button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation
 .page-header-sub { margin-top: 10px; max-width: 64ch; font-size: .96rem; }
 .dash-hero { margin: 0 0 38px; padding: clamp(24px, 4vw, 54px); border: 1px solid var(--border-subtle); border-radius: 24px; position: relative; overflow: hidden; background: var(--bg-card); }
 .dash-hero::before { content: ''; position: absolute; inset: 0 0 auto; height: 3px; background: linear-gradient(90deg, var(--cat-movie) 0% 25%, var(--cat-series) 25% 50%, var(--cat-anime) 50% 75%, var(--cat-game) 75%); }
-.dash-hero::after { content: '✦'; position: absolute; right: 4%; top: 5%; font-size: clamp(100px, 17vw, 220px); color: var(--text-primary); opacity: .035; line-height: 1; pointer-events: none; transform: rotate(-15deg); }
 .dash-hero-inner { text-align: left; padding: 0; position: relative; z-index: 1; }
 .dash-hero-title { max-width: 24ch; font-size: clamp(1.9rem, 3.7vw, 3.25rem); line-height: 1.12; letter-spacing: -.045em; text-wrap: balance; }
 .dash-hero-sub { margin: 16px 0 0; max-width: 56ch; line-height: 1.65; }
@@ -206,14 +201,10 @@ a.friend-name:hover { text-decoration: underline; text-underline-offset: 4px; }
   .is-following { animation: story-confirm .3s var(--ease-out); }
   @keyframes story-arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes story-confirm { 50% { transform: scale(1.04); } }
-  @view-transition { navigation: auto; }
-  ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .16s; }
 }
-@media (max-width: 1200px) { .space-link span { display: none; } .space-link { padding-inline: 11px; } }
 @media (max-width: 900px) {
   .navbar { gap: 8px; }
   .nav-primary { justify-content: center; }
-  .space-link span { display: inline; }
   #clAccordion { gap: 12px; padding: 14px; }
 }
 @media (max-width: 700px) {
@@ -222,7 +213,6 @@ a.friend-name:hover { text-decoration: underline; text-underline-offset: 4px; }
   .mobile-dock a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 52px; padding: 4px 0; border-radius: 12px; color: var(--text-muted); text-decoration: none; font-size: .65rem; font-weight: 650; }
   .mobile-dock svg { width: 21px; height: 21px; }
   .mobile-dock a[aria-current] { color: var(--text-primary); background: var(--surface-raised); }
-  .nav-spaces { display: none; }
   .dash-hero { padding: 26px 22px; margin-bottom: 28px; }
   .dash-hero-title { font-size: 2rem; }
   .dash-hero-sub { font-size: .92rem; }

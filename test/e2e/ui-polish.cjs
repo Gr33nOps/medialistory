@@ -207,6 +207,22 @@ const igdb = titles.map((t, i) => ({ id: i + 1, name: t.name, first_release_date
       assert.equal(queries.slice(queryStart).at(-1).search, 'new query', 'Final search sent');
       delay = false;
     }
+    // Opening a title must retain the page the visitor was browsing, including
+    // when the document reloads after browser Back.
+    for (const route of ['movies.html', 'series.html', 'anime.html', 'home.html']) {
+      await page.goto(base + '/' + route);
+      await page.locator('.game-title-link').first().waitFor();
+      await page.locator('#nextPageBtn').click();
+      await page.getByText('Page 2', { exact: true }).waitFor();
+      assert.equal(new URL(page.url()).searchParams.get('page'), '2', route + ' records the active page in its address');
+      await Promise.all([
+        page.waitForURL('**/title.html?ref=*'),
+        page.locator('.game-title-link').first().click()
+      ]);
+      await page.goBack();
+      await page.locator('.game-title-link').first().waitFor();
+      assert.equal(await page.locator('#pageInfo').textContent(), 'Page 2', route + ' restores page 2 after Back');
+    }
     await page.locator('#navSearchBtn').click();
     delay = true;
     await Promise.all([

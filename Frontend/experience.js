@@ -38,17 +38,6 @@
         if (a.dataset.destination === key) a.setAttribute('aria-current', 'page');
         else a.removeAttribute('aria-current');
       });
-      document.querySelectorAll('.space-link').forEach(function(a) {
-        if (a.dataset.destination === key) a.setAttribute('aria-current', 'page');
-        else a.removeAttribute('aria-current');
-      });
-    }
-    var right = nav.querySelector('.nav-right');
-    if (right && signedIn) {
-      var spaces = document.createElement('div');
-      spaces.className = 'nav-spaces';
-      spaces.innerHTML = destinations.slice(1, 3).map(function(d) { return '<a class="space-link" data-destination="' + d[0] + '" href="' + d[1] + '">' + icon(d[0]) + '<span>' + d[2] + '</span></a>'; }).join('');
-      right.prepend(spaces);
     }
     markDestination(new URLSearchParams(location.search).get('tab'));
     document.addEventListener('librarytabchange', function(e) { markDestination(e.detail); });

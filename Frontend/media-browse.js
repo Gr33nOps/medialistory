@@ -55,6 +55,18 @@
 
   function byId(id) { return document.getElementById(id); }
 
+  function restoreBrowsePage() {
+    var saved = Number(new URLSearchParams(window.location.search).get('page'));
+    if (Number.isInteger(saved) && saved > 1) currentPage = saved;
+  }
+
+  function saveBrowsePage() {
+    var url = new URL(window.location.href);
+    if (currentPage > 1) url.searchParams.set('page', String(currentPage));
+    else url.searchParams.delete('page');
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+  }
+
   function guest() { return typeof getToken === 'function' ? !getToken() : true; }
 
   function promptSignIn(message) {
@@ -77,6 +89,7 @@
   })();
 
   function initPage() {
+    restoreBrowsePage();
     onClick('searchBtn', doSearch);
     onClick('filterBtn', function () { byId('filterSection').classList.toggle('hidden'); });
     onClick('applyFiltersBtn', applyFilters);
@@ -109,7 +122,7 @@
           currentSort = v.substring(0, i);
           currentSortOrder = v.substring(i + 1);
         }
-        currentPage = 1; hasMore = true; window.scrollTo(0, 0); fetchMedia(true);
+        currentPage = 1; saveBrowsePage(); hasMore = true; window.scrollTo(0, 0); fetchMedia(true);
       });
     }
 
@@ -388,7 +401,7 @@
     currentFilters.search = term;
     var sortBy = byId('sortBy');
     if (term) { if (sortBy) sortBy.value = 'popularity-desc'; currentSort = 'popularity'; currentSortOrder = 'desc'; }
-    currentPage = 1; hasMore = true; window.scrollTo(0, 0); fetchMedia(true);
+    currentPage = 1; saveBrowsePage(); hasMore = true; window.scrollTo(0, 0); fetchMedia(true);
     loadPeopleFor(term);
   }
 
@@ -399,7 +412,7 @@
       if (el && el.value) next[f.key] = el.value;
     });
     currentFilters = next;
-    currentPage = 1; hasMore = true; window.scrollTo(0, 0); fetchMedia(true);
+    currentPage = 1; saveBrowsePage(); hasMore = true; window.scrollTo(0, 0); fetchMedia(true);
   }
 
   // Reset clears only the filter controls; the search box and sort are left alone.
@@ -407,7 +420,7 @@
     FILTERS.forEach(function (f) { var el = byId(f.id); if (el) el.value = ''; });
     var kept = currentFilters.search || '';
     currentFilters = kept ? { search: kept } : {};
-    currentPage = 1; hasMore = true; window.scrollTo(0, 0); fetchMedia(true);
+    currentPage = 1; saveBrowsePage(); hasMore = true; window.scrollTo(0, 0); fetchMedia(true);
   }
 
   // Populate the option lists that come from data rather than static markup:
@@ -441,12 +454,12 @@
 
   function prevPage() {
     if (currentPage <= 1 || isLoading) return;
-    currentPage--; window.scrollTo(0, 0); fetchMedia(true);
+    currentPage--; saveBrowsePage(); window.scrollTo(0, 0); fetchMedia(true);
   }
 
   function nextPage() {
     if (!hasMore || isLoading) return;
-    currentPage++; window.scrollTo(0, 0); fetchMedia(true);
+    currentPage++; saveBrowsePage(); window.scrollTo(0, 0); fetchMedia(true);
   }
 
   function updatePagination() {
