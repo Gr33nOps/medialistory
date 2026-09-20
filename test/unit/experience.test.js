@@ -160,3 +160,14 @@ test('title rendering treats catalog strings as text even without the shared esc
   assert.equal(w.document.querySelector('.title-hero-poster').getAttribute('alt'), name + ' cover');
   dom.window.close();
 });
+
+test('profile showcase links prefer provider references over internal library IDs', () => {
+  const dom = page('profile');
+  const w = dom.window;
+  const html = w.mgShowcase([{ game_id: 33764, media_ref: 'igdb_119161', name: 'Need for Speed: Heat' }], 'Empty');
+  const host = w.document.createElement('div'); host.innerHTML = html;
+  assert.equal(host.querySelector('a').getAttribute('href'), 'title.html?ref=igdb_119161');
+  host.innerHTML = w.mgShowcase([{ game_id: 'tmdb_movie_550', name: 'Fight Club' }], 'Empty');
+  assert.equal(host.querySelector('a').getAttribute('href'), 'title.html?ref=tmdb_movie_550');
+  dom.window.close();
+});

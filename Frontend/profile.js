@@ -652,7 +652,7 @@ function wireManagers() {
 function mgShowcase(items, emptyMsg) {
     if (!items.length) return '<p class="pf-empty">' + mgEsc(emptyMsg) + '</p>';
     return '<div class="dash-scroller">' + items.map(function (it) {
-        var ref = it.game_id || it.ref || mgRef(it);
+        var ref = it.media_ref || it.ref || mgRef(it);
         var img = it.background_image || it.img || MG_FALLBACK;
         return '<a class="dash-card" href="title.html?ref=' + encodeURIComponent(ref) + '" title="' + mgEsc(it.name) + '">' +
             '<div class="dash-card-poster"><img src="' + mgEsc(img) + '" alt="' + mgEsc(it.name) + '" loading="lazy" onerror="this.src=\'' + MG_FALLBACK + '\'"></div>' +
