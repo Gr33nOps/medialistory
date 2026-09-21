@@ -443,12 +443,22 @@ module.exports = (verifyToken, checkBanned, db) => {
     }
   }
 
+  /* Degraded fallback: serve games from our own catalog when IGDB is
+     unreachable. It has to honour the same sort contract as the live path -
+     the chosen field AND direction - or "Oldest" quietly shows the newest and
+     "Name Z-A" shows A-Z. It also mirrors the live browse floors: cover-first,
+     and released-only (no undated or still-upcoming rows) unless the caller
+     asked for the upcoming list, so "Newest" can't open on unreleased titles. */
   async function loadListFromDb(body) {
     if (!db) return null;
     try {
       const limit = clampInt(body.limit, 1, 50, 20);
       const offset = clampInt(body.offset, 0, 5000, 0);
       const search = sanitizeToken(body.search, 80);
+      const comingSoon = !!body.comingSoon || body.sort === 'coming';
+      const sortKey = ALLOWED_SORT[body.sort] ? body.sort : 'release';
+      const sortOrder = body.sortOrder === 'asc' ? 'asc' : 'desc';
+      const nowIso = new Date().toISOString();
 
       let q = db('games')
         .whereNotNull('igdb_id')
@@ -456,15 +466,34 @@ module.exports = (verifyToken, checkBanned, db) => {
 
       if (search) {
         q = q.where('name', 'ilike', `%${search}%`);
+      } else {
+        // Cover-first, like the live browse, so the grid isn't full of blank tiles.
+        q = q.whereNotNull('background_image');
       }
 
-      const sortKey = ALLOWED_SORT[body.sort] ? body.sort : 'release';
-      if (sortKey === 'name') {
-        q = q.orderBy('name', 'asc');
-      } else if (sortKey === 'rating' || sortKey === 'popularity') {
-        q = q.orderBy('metacritic_score', 'desc');
+      if (comingSoon) {
+        // Upcoming only, soonest first - the direction the coming-soon list expects.
+        q = q.whereNotNull('released').where('released', '>', nowIso).orderBy('released', 'asc');
       } else {
-        q = q.orderBy('released', 'desc');
+        // Every other browse is a released-games view; drop undated and future
+        // rows so date sorts behave. (Skipped during search so a title people
+        // typed in full still shows even if it is upcoming or undated.)
+        if (!search) q = q.whereNotNull('released').where('released', '<=', nowIso);
+
+        if (sortKey === 'name') {
+          q = q.orderBy('name', sortOrder);
+        } else if (sortKey === 'rating' || sortKey === 'popularity') {
+          // No real popularity column here, so both rank by score - but keep the
+          // rated titles first (Postgres would otherwise sort NULLs to the top
+          // on desc, burying every scored game under the unscored ones).
+          q = q.orderByRaw(
+            sortKey === 'popularity'
+              ? `metacritic_score ${sortOrder === 'asc' ? 'asc nulls last' : 'desc nulls last'}, rating ${sortOrder === 'asc' ? 'asc nulls last' : 'desc nulls last'}`
+              : `metacritic_score ${sortOrder === 'asc' ? 'asc nulls last' : 'desc nulls last'}`
+          );
+        } else {
+          q = q.orderBy('released', sortOrder);
+        }
       }
 
       const rows = await q.limit(limit).offset(offset);
