@@ -109,9 +109,13 @@ module.exports = (verifyToken, checkBanned, db) => {
     return (process.env.IGDB_CLIENT_ID || '').trim();
   }
 
+  function getClientSecret() {
+    return (process.env.IGDB_CLIENT_SECRET || '').trim();
+  }
+
   async function getAccessToken() {
     const clientId = getClientId();
-    const clientSecret = (process.env.IGDB_CLIENT_SECRET || '').trim();
+    const clientSecret = getClientSecret();
     const now = Date.now();
 
     if (cachedToken && now < tokenExpiresAt - 60_000) {
@@ -144,9 +148,21 @@ module.exports = (verifyToken, checkBanned, db) => {
     return '';
   }
 
+  function igdbRequest(path, clientId, accessToken, body) {
+    return fetch(`https://api.igdb.com/v4${path}`, {
+      method: 'POST',
+      headers: {
+        'Client-ID': clientId,
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/json'
+      },
+      body
+    });
+  }
+
   async function igdbFetch(path, body) {
     const clientId = getClientId();
-    const accessToken = await getAccessToken();
+    let accessToken = await getAccessToken();
 
     if (!clientId || !accessToken) {
       const err = new Error('IGDB credentials not configured');
@@ -159,16 +175,28 @@ module.exports = (verifyToken, checkBanned, db) => {
     }
 
     await respectRateLimit();
+    let res = await igdbRequest(path, clientId, accessToken, body);
 
-    return fetch(`https://api.igdb.com/v4${path}`, {
-      method: 'POST',
-      headers: {
-        'Client-ID': clientId,
-        'Authorization': `Bearer ${accessToken}`,
-        'Accept': 'application/json'
-      },
-      body
-    });
+    /* A token minted elsewhere and pasted into IGDB_ACCESS_TOKEN has an expiry
+       we can't see, so on boot we optimistically trust it for six hours. When
+       it has actually expired (or was revoked), IGDB answers 401/403 and, until
+       that six-hour window lapses, getAccessToken keeps handing back the same
+       dead token - every game request degrades. So on an auth failure, if we
+       hold the client id + secret needed to mint our own, drop the cached token
+       and retry once with a fresh one. This is what lets a newly-added secret
+       take effect without waiting out the window or restarting the process. */
+    if ((res.status === 401 || res.status === 403) && clientId && getClientSecret()) {
+      cachedToken = '';
+      tokenExpiresAt = 0;
+      delete process.env.IGDB_ACCESS_TOKEN; // stop re-seeding the stale token
+      accessToken = await getAccessToken();
+      if (accessToken) {
+        await respectRateLimit();
+        res = await igdbRequest(path, clientId, accessToken, body);
+      }
+    }
+
+    return res;
   }
 
   function sendError(res, error, fallbackMessage) {
@@ -483,13 +511,16 @@ module.exports = (verifyToken, checkBanned, db) => {
         if (sortKey === 'name') {
           q = q.orderBy('name', sortOrder);
         } else if (sortKey === 'rating' || sortKey === 'popularity') {
-          // No real popularity column here, so both rank by score - but keep the
-          // rated titles first (Postgres would otherwise sort NULLs to the top
-          // on desc, burying every scored game under the unscored ones).
+          // Keep rated titles first (Postgres would otherwise sort NULLs to the
+          // top on desc, burying every scored game). There's no true popularity
+          // column here, so the two lean on different signals to avoid being an
+          // identical list: Top Rated leads with critic score, Popularity with
+          // the community rating.
+          const dir = sortOrder === 'asc' ? 'asc nulls last' : 'desc nulls last';
           q = q.orderByRaw(
             sortKey === 'popularity'
-              ? `metacritic_score ${sortOrder === 'asc' ? 'asc nulls last' : 'desc nulls last'}, rating ${sortOrder === 'asc' ? 'asc nulls last' : 'desc nulls last'}`
-              : `metacritic_score ${sortOrder === 'asc' ? 'asc nulls last' : 'desc nulls last'}`
+              ? `rating ${dir}, metacritic_score ${dir}`
+              : `metacritic_score ${dir}, rating ${dir}`
           );
         } else {
           q = q.orderBy('released', sortOrder);
