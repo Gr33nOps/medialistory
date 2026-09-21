@@ -304,10 +304,15 @@
 
       if (pendingQuery) return;
 
-      if (typeof applyQueryStateNotice === 'function') applyQueryStateNotice(queryStateFrom(r));
+      var queryState = queryStateFrom(r);
+      if (currentFilters.search && queryState) queryState.sortState = 'applied';
+      if (typeof applyQueryStateNotice === 'function') applyQueryStateNotice(queryState);
 
       var data = await r.json();
       if (r.ok && Array.isArray(data)) {
+        if (currentFilters.search && typeof sortSearchResults === 'function') {
+          data = sortSearchResults(data, currentSort, currentSortOrder);
+        }
         // Before rendering, so the first paint already carries the badges.
         if (typeof loadLibraryIndex === 'function') await loadLibraryIndex();
         if (pendingQuery) return;
@@ -399,8 +404,6 @@
   function doSearch() {
     var term = byId('searchInput').value.trim();
     currentFilters.search = term;
-    var sortBy = byId('sortBy');
-    if (term) { if (sortBy) sortBy.value = 'popularity-desc'; currentSort = 'popularity'; currentSortOrder = 'desc'; }
     currentPage = 1; saveBrowsePage(); hasMore = true; window.scrollTo(0, 0); fetchMedia(true);
     loadPeopleFor(term);
   }

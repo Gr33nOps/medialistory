@@ -50,7 +50,18 @@ const igdb = titles.map((t, i) => ({ id: i + 1, name: t.name, first_release_date
         queries.push(payload);
         if (delay && payload.search === 'old query') await new Promise(r => setTimeout(r, 900));
         status = failure ? 503 : 200;
-        data = failure ? { error: 'Temporarily unavailable' } : empty ? [] : p === '/igdb/games' ? igdb : titles.map(t => ({ ...t, name: payload.search || t.name }));
+        if (failure) data = { error: 'Temporarily unavailable' };
+        else if (empty) data = [];
+        else if (payload.search === 'sort check') {
+          const names = ['Zulu Result', 'Alpha Result', 'Middle Result'];
+          data = (p === '/igdb/games' ? igdb : titles).slice(0, 3).map((item, i) => ({
+            ...item,
+            name: names[i],
+            rating: [1, 5, 3][i],
+            total_rating: [20, 100, 60][i],
+            total_rating_count: 10
+          }));
+        } else data = p === '/igdb/games' ? igdb : titles.map(t => ({ ...t, name: payload.search || t.name }));
         headers = { 'X-Has-More': '1', 'X-Sort-State': payload.search ? 'unavailable' : 'applied', 'X-Filters-Applied': payload.search ? '0' : '1' };
       } else if (p === '/people') data = { name: 'Alex Morgan', kind: 'person', image: poster, summary: titles[0].description, facts: [{ label: 'Known for', value: 'Acting' }], credits: titles.map(t => ({ ...t, ref: t.id })) };
       else if (p === '/followers' || p === '/users/2/followers') data = { followers: people };
@@ -208,6 +219,19 @@ const igdb = titles.map((t, i) => ({ id: i + 1, name: t.name, first_release_date
       await page.waitForFunction(() => document.querySelector('#searchResults').getAttribute('aria-busy') === 'false');
       assert.equal(queries.slice(queryStart).at(-1).search, 'new query', 'Final search sent');
       delay = false;
+    }
+    // Searching must preserve the chosen sort and apply it even when an
+    // upstream search endpoint only returns relevance ordering.
+    for (const route of ['series.html', 'anime.html', 'home.html']) {
+      await page.goto(base + '/' + route);
+      await page.locator('.game-title-link').first().waitFor();
+      await page.locator('#sortBy').selectOption('rating-desc');
+      await page.locator('#searchInput').fill('sort check');
+      await page.locator('#searchBtn').click();
+      await page.locator('.game-title-link').first().waitFor();
+      assert.equal(await page.locator('#sortBy').evaluate(el => el.value), 'rating-desc', route + ' keeps the selected sort during search');
+      assert.deepEqual(await page.locator('.game-title-link').allTextContents(), ['Alpha Result', 'Middle Result', 'Zulu Result']);
+      assert.equal(await page.locator('#sortBy').isEnabled(), true, route + ' keeps sorting available during search');
     }
     // Opening a title must retain the page the visitor was browsing, including
     // when the document reloads after browser Back.

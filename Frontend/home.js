@@ -504,10 +504,16 @@ async function fetchGames(replace) {
                 };
             });
 
+            if (currentFilters.search && typeof sortSearchResults === 'function') {
+                transformedGames = sortSearchResults(transformedGames, currentSort, currentSortOrder);
+            }
+
             allGames     = replace ? transformedGames : allGames.concat(transformedGames);
             hasMoreGames = data.length === apiGamesPerPage;
 
-            if (typeof applyQueryStateNotice === 'function') applyQueryStateNotice(queryStateFrom(response));
+            var queryState = queryStateFrom(response);
+            if (currentFilters.search && queryState) queryState.sortState = 'applied';
+            if (typeof applyQueryStateNotice === 'function') applyQueryStateNotice(queryState);
 
             collectFilterOptions(transformedGames);
             // Before rendering, so the first paint already carries the badges.
@@ -726,17 +732,6 @@ function resetFilters() {
 function searchGames() {
     var searchTerm = document.getElementById('searchInput').value.trim();
     currentFilters.search = searchTerm;
-
-    var sortBySelect = document.getElementById('sortBy');
-    if (searchTerm) {
-        sortBySelect.value = 'popularity-desc';
-        currentSort      = 'popularity';
-        currentSortOrder = 'desc';
-    } else {
-        sortBySelect.value = 'popularity-desc';
-        currentSort      = 'popularity';
-        currentSortOrder = 'desc';
-    }
 
     currentPage  = 1;
     saveBrowsePage();
