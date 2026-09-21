@@ -133,10 +133,17 @@ module.exports = (verifyToken, checkBanned, db) => {
       const tokenData = await tokenRes.json();
 
       if (!tokenRes.ok || !tokenData.access_token) {
+        // Twitch says why (e.g. "invalid client secret"); surface it without
+        // ever logging the secret itself, so a bad/mismatched credential is
+        // diagnosable from the Render logs instead of silently degrading.
+        console.error(
+          `[IGDB] Twitch token request failed (${tokenRes.status}): ${tokenData && tokenData.message ? tokenData.message : 'no access_token returned'}`
+        );
         const err = new Error('Failed to refresh Twitch/IGDB access token');
         err.details = tokenData;
         throw err;
       }
+      console.log('[IGDB] Twitch access token minted successfully');
 
       cachedToken = tokenData.access_token;
       tokenExpiresAt = now + (Number(tokenData.expires_in) || 5000) * 1000;
@@ -176,6 +183,7 @@ module.exports = (verifyToken, checkBanned, db) => {
 
     await respectRateLimit();
     let res = await igdbRequest(path, clientId, accessToken, body);
+    if (!res.ok) console.warn(`[IGDB] ${path} returned ${res.status}`);
 
     /* A token minted elsewhere and pasted into IGDB_ACCESS_TOKEN has an expiry
        we can't see, so on boot we optimistically trust it for six hours. When
@@ -186,6 +194,7 @@ module.exports = (verifyToken, checkBanned, db) => {
        and retry once with a fresh one. This is what lets a newly-added secret
        take effect without waiting out the window or restarting the process. */
     if ((res.status === 401 || res.status === 403) && clientId && getClientSecret()) {
+      console.warn('[IGDB] auth rejected; refreshing token and retrying once');
       cachedToken = '';
       tokenExpiresAt = 0;
       delete process.env.IGDB_ACCESS_TOKEN; // stop re-seeding the stale token
@@ -193,7 +202,14 @@ module.exports = (verifyToken, checkBanned, db) => {
       if (accessToken) {
         await respectRateLimit();
         res = await igdbRequest(path, clientId, accessToken, body);
+        if (!res.ok) {
+          // Fresh token still rejected => the client id and secret don't belong
+          // to the same Twitch app (or IGDB access isn't enabled on it).
+          console.error(`[IGDB] ${path} still ${res.status} after token refresh - check that IGDB_CLIENT_ID and IGDB_CLIENT_SECRET are from the SAME Twitch app`);
+        }
       }
+    } else if ((res.status === 401 || res.status === 403)) {
+      console.error('[IGDB] auth rejected and no IGDB_CLIENT_SECRET set to mint a fresh token');
     }
 
     return res;
