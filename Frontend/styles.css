@@ -6320,9 +6320,8 @@ a.detail-cast-card { text-decoration: none; color: inherit; }
 
 /* Product polish: retain the category palette and existing page structure,
    with quiet surfaces, legible controls and the same rhythm at every width. */
-html { background: var(--bg-base); color-scheme: dark; }
+html { color-scheme: dark; }
 :root[data-theme="light"] { color-scheme: light; }
-.aurora { display: none; }
 button, input, select, textarea { font-family: inherit; }
 a { color: var(--accent-light); }
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
