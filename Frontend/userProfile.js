@@ -79,11 +79,6 @@ function initPage() {
         return;
     }
 
-    if (viewingUserId === currentUser.id) {
-        window.location.href = 'profile.html';
-        return;
-    }
-
     document.querySelectorAll('.page-tab').forEach(function(tab) {
         tab.addEventListener('click', function() {
             document.querySelectorAll('.page-tab').forEach(function(t) {
@@ -190,8 +185,8 @@ function displayUserProfile(user) {
         'https://ui-avatars.com/api/?name=' + encodeURIComponent(name) + '&size=200&background=475569&color=fff&bold=true';
 
     document.getElementById('profileTitle').textContent     = name + "'s profile";
-    document.getElementById('gameListTitle').textContent    = name + "'s collection";
-    document.getElementById('customListsTitle').textContent = name + "'s lists";
+    document.getElementById('gameListTitle').textContent    = name + "'s library";
+    document.getElementById('customListsTitle').textContent = name + "'s collections";
     document.getElementById('userAvatar').src               = avatarUrl;
     document.getElementById('displayName').textContent      = name;
     document.getElementById('displayUsername').textContent  = user.username;
@@ -370,7 +365,7 @@ function upRenderAccordion() {
         ? upLists
         : upLists.filter(function (l) { return l.category === currentMediaFilter; });
     if (upLists.length === 0) {
-        container.innerHTML = '<div class="coll-empty-state"><div class="coll-empty-icon">No lists</div><p>This user has no public lists yet.</p></div>';
+        container.innerHTML = '<div class="coll-empty-state"><div class="coll-empty-icon">No collections yet</div><p>This person has not shared any collections yet.</p></div>';
         return;
     }
     if (visible.length === 0) {
@@ -400,7 +395,7 @@ function upRenderAccordionRow(list) {
     var catBadge   = list.category ? '<span class="cl-cat-badge" data-cat="' + list.category + '">' + UP_CAT_LABEL[list.category] + '</span>' : '';
     return '<div class="cl-acc-row ' + (isExpanded ? 'expanded' : '') + '" data-list-id="' + list.id + '">' +
         '<div class="up-acc-header cl-acc-header">' +
-            '<div class="cl-acc-header-left">' +
+            '<button type="button" class="cl-acc-header-left cl-collection-toggle" aria-expanded="' + isExpanded + '" aria-controls="up-acc-body-' + list.id + '">' +
                 '<span class="cl-acc-chevron">' + (isExpanded ? 'v' : '>') + '</span>' +
                 '<div class="cl-acc-title-group">' +
                     '<div class="cl-acc-title-row">' +
@@ -410,7 +405,7 @@ function upRenderAccordionRow(list) {
                     '</div>' +
                     (list.description ? '<div class="cl-acc-desc">' + esc(list.description) + '</div>' : '') +
                 '</div>' +
-            '</div>' +
+            '</button>' +
         '</div>' +
         '<div class="cl-acc-body ' + (isExpanded ? '' : 'hidden') + '" id="up-acc-body-' + list.id + '"></div>' +
     '</div>';
@@ -425,6 +420,7 @@ async function upToggleAccordion(listId) {
 
     container.querySelectorAll('.cl-acc-row').forEach(function(r) {
         r.classList.remove('expanded');
+        r.querySelector('.cl-collection-toggle').setAttribute('aria-expanded', 'false');
         r.querySelector('.cl-acc-chevron').textContent = '>';
         r.querySelector('.cl-acc-body').classList.add('hidden');
     });
@@ -437,6 +433,7 @@ async function upToggleAccordion(listId) {
 
 async function upExpandRow(row, listId, doFetch) {
     row.classList.add('expanded');
+    row.querySelector('.cl-collection-toggle').setAttribute('aria-expanded', 'true');
     row.querySelector('.cl-acc-chevron').textContent = 'v';
     var body = row.querySelector('.cl-acc-body');
     body.classList.remove('hidden');
@@ -589,7 +586,7 @@ function updateFollowButton() {
     if (viewedUser && viewedUser.isSelf) { btn.style.display = 'none'; return; }
     btn.style.display = '';
     if (followStatus.isFollowing) {
-        btn.textContent = 'Following'; btn.className = 'btn btn-secondary btn-sm'; btn.onclick = unfollowUser;
+        btn.textContent = '✓ Following'; btn.className = 'btn btn-secondary btn-sm is-following'; btn.onclick = unfollowUser;
     } else if (followStatus.requested) {
         btn.textContent = 'Requested'; btn.className = 'btn btn-secondary btn-sm'; btn.onclick = unfollowUser;
     } else {
@@ -599,6 +596,11 @@ function updateFollowButton() {
 }
 
 async function followUser() {
+    var btn = document.getElementById('followActionBtn');
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
+    btn.textContent = 'Following…';
     try {
         var r = await fetch(`${API_BASE}/follow/${viewingUserId}`, {
             method: 'POST',
@@ -606,11 +608,17 @@ async function followUser() {
         });
         var d = await r.json().catch(function () { return {}; });
         if (r.ok) {
-            if (d.status === 'requested' && typeof toast === 'function') toast('Follow request sent.', 'success');
+            followStatus.isFollowing = d.status !== 'requested';
+            followStatus.requested = d.status === 'requested';
+            updateFollowButton();
+            btn.disabled = false;
+            btn.removeAttribute('aria-busy');
+            if (typeof toast === 'function') toast(d.status === 'requested' ? 'Follow request sent.' : 'Following! A new connection for your next discovery.', 'success');
             userGamesLoaded = false;
             await loadUserProfile();
         } else { notify('Failed to follow: ' + (d.error || 'Unknown error')); }
     } catch (e) { notify('Error following user. Please try again.'); }
+    finally { btn.disabled = false; btn.removeAttribute('aria-busy'); updateFollowButton(); }
 }
 
 async function unfollowUser() {

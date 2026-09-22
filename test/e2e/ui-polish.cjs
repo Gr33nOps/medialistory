@@ -24,7 +24,8 @@ const igdb = titles.map((t, i) => ({ id: i + 1, name: t.name, first_release_date
       localStorage.setItem('currentUser', JSON.stringify(user));
       window.MGL_SENTRY_DSN = '';
     }, { user });
-    let empty = false, failure = false, delay = false, signedIn = true;
+    let empty = false, failure = false, delay = false, signedIn = true, followed = false;
+    const people = [{ id: 2, username: 'storyseeker', display_name: 'Morgan Chen', avatar_url: poster, is_private: false }, { id: 3, username: 'sam', display_name: 'Sam Rivera', avatar_url: poster, is_private: true }];
     const queries = [];
     await context.route('**/*', async route => {
       const req = route.request(), url = new URL(req.url());
@@ -38,8 +39,8 @@ const igdb = titles.map((t, i) => ({ id: i + 1, name: t.name, first_release_date
       else if (p === '/user/games') data = req.method() === 'GET' ? { games } : { success: true, id: 100 };
       else if (p === '/user/games/refs') data = [{ ref: titles[0].id, id: 1, status: 'completed', score: 8 }];
       else if (p === '/user/profile/top') data = { top: {}, current: [] };
-      else if (p === '/user/lists') data = { lists: [{ id: 1, name: 'Weekend favourites', category: 'movie', description: 'Something worth watching again.', game_count: 8 }] };
-      else if (/\/lists\/1/.test(p)) data = { list: { id: 1, name: 'Weekend favourites' }, games: games.slice(0, 8) };
+      else if (p === '/user/lists') data = { lists: [{ id: 1, name: 'Weekend favourites', category: 'movie', description: 'Something worth watching again.', game_count: 8, is_public: true, cover_images: [poster, poster, poster] }] };
+      else if (/\/lists\/1/.test(p)) data = { list: { id: 1, name: 'Weekend favourites', games: games.slice(0, 8) } };
       else if (p === '/users/2') data = { user: { ...user, id: 2, canView: true, display_name: 'AlexandertheGreatWithAnExceptionallyLongUnbrokenName' }, top: {}, current: [] };
       else if (p === '/users/2/games') data = { games };
       else if (p === '/users/2/lists') data = { lists: [] };
@@ -49,14 +50,27 @@ const igdb = titles.map((t, i) => ({ id: i + 1, name: t.name, first_release_date
         queries.push(payload);
         if (delay && payload.search === 'old query') await new Promise(r => setTimeout(r, 900));
         status = failure ? 503 : 200;
-        data = failure ? { error: 'Temporarily unavailable' } : empty ? [] : p === '/igdb/games' ? igdb : titles.map(t => ({ ...t, name: payload.search || t.name }));
+        if (failure) data = { error: 'Temporarily unavailable' };
+        else if (empty) data = [];
+        else if (payload.search === 'sort check') {
+          const names = ['Zulu Result', 'Alpha Result', 'Middle Result'];
+          data = (p === '/igdb/games' ? igdb : titles).slice(0, 3).map((item, i) => ({
+            ...item,
+            name: names[i],
+            rating: [1, 5, 3][i],
+            total_rating: [20, 100, 60][i],
+            total_rating_count: 10
+          }));
+        } else data = p === '/igdb/games' ? igdb : titles.map(t => ({ ...t, name: payload.search || t.name }));
         headers = { 'X-Has-More': '1', 'X-Sort-State': payload.search ? 'unavailable' : 'applied', 'X-Filters-Applied': payload.search ? '0' : '1' };
       } else if (p === '/people') data = { name: 'Alex Morgan', kind: 'person', image: poster, summary: titles[0].description, facts: [{ label: 'Known for', value: 'Acting' }], credits: titles.map(t => ({ ...t, ref: t.id })) };
-      else if (p === '/followers') data = { followers: [] };
-      else if (p === '/following') data = { following: [] };
+      else if (p === '/followers' || p === '/users/2/followers') data = { followers: people };
+      else if (p === '/following') data = { following: followed ? [{ ...people[0], relationship: 'following' }] : [] };
+      else if (p === '/follow/2') { followed = req.method() === 'POST'; data = { status: followed ? 'following' : 'none' }; }
       else if (p === '/following/activity') data = { activity: [] };
       else if (p === '/follow/requests') data = { requests: [] };
-      else if (p.startsWith('/discover') || p === '/users/search') data = { users: [] };
+      else if (p === '/discover/similar') data = { users: people.map(p => ({ ...p, similarity: { percent: 72, shared: 5, coRated: 4, topShared: 1 } })) };
+      else if (p.startsWith('/discover') || p === '/users/search') data = { users: people.map(p => ({ ...p, relationship: p.id === 2 && followed ? 'following' : 'none' })) };
       else if (p.endsWith('/seasons')) data = { seasons: [] };
       await route.fulfill({ status, contentType: 'application/json', headers, body: JSON.stringify(data) });
     });
@@ -112,12 +126,22 @@ const igdb = titles.map((t, i) => ({ id: i + 1, name: t.name, first_release_date
         await fit(route + ' ' + width);
         if (['library.html', 'profile.html', 'title.html?ref=tmdb_movie_1', 'dashboard.html'].includes(route)) await shot(route.split('.')[0] + '-' + width);
         if (route === 'profile.html') {
+          await page.locator('[data-connections="followers"]').click();
+          await page.locator('.connection-person').first().waitFor();
+          await page.locator('#connectionsSearch').fill('morgan');
+          assert.equal(await page.locator('.connection-person').count(), 1);
+          await fit('followers dialog ' + width);
+          await shot('followers-' + width);
+          await page.keyboard.press('Escape');
+          assert.equal(await page.locator('[data-connections="followers"]').evaluate(el => el === document.activeElement), true);
           await page.locator('#editProfileBtn').click();
           await fit('profile edit ' + width);
           await shot('profile-edit-' + width);
         }
         if (route === 'library.html') {
           if (width <= 600) {
+            const categoryWidths = await page.locator('.media-tab').evaluateAll(tabs => tabs.map(tab => tab.getBoundingClientRect().width));
+            assert(Math.max(...categoryWidths) - Math.min(...categoryWidths) < 1, 'Library category buttons have equal widths');
             assert.equal(await page.locator('.overview-split').isVisible(), false);
             await page.locator('#overviewToggle').click();
             assert.equal(await page.locator('.overview-split').isVisible(), true);
@@ -128,6 +152,13 @@ const igdb = titles.map((t, i) => ({ id: i + 1, name: t.name, first_release_date
           await page.locator('#tabBtnLists').click();
           await fit('custom lists ' + width);
           await shot('custom-lists-' + width);
+          await page.locator('.cl-collection-toggle').focus();
+          await page.keyboard.press('Enter');
+          await page.locator('.cl-list-item').first().waitFor();
+          assert.equal(await page.locator('.cl-collection-toggle').getAttribute('aria-expanded'), 'true');
+          await fit('expanded collection ' + width);
+          await shot('collection-detail-' + width);
+          await page.locator('.cl-collection-toggle').click();
           await page.locator('#clNewListBtn').click();
           await page.locator('#clListFormModal').waitFor({ state: 'visible' });
           await page.locator('#clListFormSubmit').focus();
@@ -137,6 +168,14 @@ const igdb = titles.map((t, i) => ({ id: i + 1, name: t.name, first_release_date
           await shot('new-list-' + width);
           await page.locator('#clListFormCancel').click();
           assert.equal(await page.evaluate(() => document.activeElement.id), 'clNewListBtn');
+        }
+        if (route === 'friends.html') {
+          await shot('people-' + width);
+          if (!followed) {
+            await page.locator('#discoverList [data-action="follow"][data-user-id="2"]').click();
+            await page.locator('#discoverList [data-action="unfollow"][data-user-id="2"]').waitFor();
+            assert.equal(await page.locator('#followingCount').textContent(), '1 following');
+          }
         }
         if (route.startsWith('title.html')) {
           await page.locator('.desc-toggle').click();
@@ -181,6 +220,35 @@ const igdb = titles.map((t, i) => ({ id: i + 1, name: t.name, first_release_date
       assert.equal(queries.slice(queryStart).at(-1).search, 'new query', 'Final search sent');
       delay = false;
     }
+    // Searching must preserve the chosen sort and apply it even when an
+    // upstream search endpoint only returns relevance ordering.
+    for (const route of ['series.html', 'anime.html', 'home.html']) {
+      await page.goto(base + '/' + route);
+      await page.locator('.game-title-link').first().waitFor();
+      await page.locator('#sortBy').selectOption('rating-desc');
+      await page.locator('#searchInput').fill('sort check');
+      await page.locator('#searchBtn').click();
+      await page.locator('.game-title-link').first().waitFor();
+      assert.equal(await page.locator('#sortBy').evaluate(el => el.value), 'rating-desc', route + ' keeps the selected sort during search');
+      assert.deepEqual(await page.locator('.game-title-link').allTextContents(), ['Alpha Result', 'Middle Result', 'Zulu Result']);
+      assert.equal(await page.locator('#sortBy').isEnabled(), true, route + ' keeps sorting available during search');
+    }
+    // Opening a title must retain the page the visitor was browsing, including
+    // when the document reloads after browser Back.
+    for (const route of ['movies.html', 'series.html', 'anime.html', 'home.html']) {
+      await page.goto(base + '/' + route);
+      await page.locator('.game-title-link').first().waitFor();
+      await page.locator('#nextPageBtn').click();
+      await page.getByText('Page 2', { exact: true }).waitFor();
+      assert.equal(new URL(page.url()).searchParams.get('page'), '2', route + ' records the active page in its address');
+      await Promise.all([
+        page.waitForURL('**/title.html?ref=*'),
+        page.locator('.game-title-link').first().click()
+      ]);
+      await page.goBack();
+      await page.locator('.game-title-link').first().waitFor();
+      assert.equal(await page.locator('#pageInfo').textContent(), 'Page 2', route + ' restores page 2 after Back');
+    }
     await page.locator('#navSearchBtn').click();
     delay = true;
     await Promise.all([
@@ -206,6 +274,9 @@ const igdb = titles.map((t, i) => ({ id: i + 1, name: t.name, first_release_date
     failure = false;
     await page.getByRole('button', { name: 'Try again' }).click();
     await page.locator('.game-title-link').first().waitFor();
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto(base + '/dashboard.html');
+    assert.equal(await page.locator('.dash-hero').evaluate(el => getComputedStyle(el).animationName), 'none');
     assert.deepEqual(errors, [], 'Browser errors');
     console.log(JSON.stringify({ passed: checks.length, errors, checks }, null, 2));
   } finally { await browser.close(); }

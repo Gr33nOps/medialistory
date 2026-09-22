@@ -221,8 +221,8 @@ async function searchUsers() {
 // ── Shared card renderer (relationship-aware) ─────────────────────────────
 function relBtn(user) {
     const rel = user.relationship || 'none';
-    if (rel === 'following') return `<button class="btn btn-secondary" data-action="unfollow" data-user-id="${user.id}">Following</button>`;
-    if (rel === 'requested') return `<button class="btn btn-secondary" data-action="cancel-request" data-user-id="${user.id}">Requested</button>`;
+    if (rel === 'following') return `<button class="btn btn-secondary is-following" data-action="unfollow" data-user-id="${user.id}" aria-label="Unfollow ${esc(user.display_name || user.username)}">✓ Following</button>`;
+    if (rel === 'requested') return `<button class="btn btn-secondary" data-action="cancel-request" data-user-id="${user.id}" aria-label="Cancel follow request to ${esc(user.display_name || user.username)}">Requested</button>`;
     return `<button class="btn btn-primary" data-action="follow" data-user-id="${user.id}">${user.is_private ? 'Request' : 'Follow'}</button>`;
 }
 
@@ -236,7 +236,7 @@ function renderUserCard(user, { showFollowedSince = false } = {}) {
             <img src="${avatarFor(user, 80)}" alt="${esc(user.display_name || user.username)}" class="friend-avatar"
                  onerror="this.src='https://ui-avatars.com/api/?name=User&size=80&background=475569&color=fff&bold=true'">
             <div class="friend-info">
-                <div class="friend-name">${esc(user.display_name || user.username)} ${privateTag}</div>
+                <a class="friend-name" href="userProfile.html?userId=${encodeURIComponent(user.id)}">${esc(user.display_name || user.username)}</a> ${privateTag}
                 <div class="friend-username">@${esc(user.username)}</div>
                 ${followedSince}
             </div>
@@ -262,18 +262,33 @@ document.addEventListener('click', async e => {
 });
 
 async function handleFollow(userId, btn) {
+    if (btn && btn.disabled) return;
+    const original = btn ? btn.textContent : '';
     try {
-        if (btn) btn.disabled = true;
+        if (btn) { btn.disabled = true; btn.setAttribute('aria-busy', 'true'); btn.textContent = 'Following…'; }
         const r = await fetch(`${API_BASE}/follow/${userId}`, { method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` } });
         const d = await r.json().catch(() => ({}));
         if (r.ok) {
-            if (d.status === 'requested' && typeof toast === 'function') toast('Follow request sent.', 'success');
+            const requested = d.status === 'requested';
+            if (btn) {
+                btn.textContent = requested ? 'Requested' : '✓ Following';
+                btn.dataset.action = requested ? 'cancel-request' : 'unfollow';
+                btn.classList.replace('btn-primary', 'btn-secondary');
+                btn.classList.toggle('is-following', !requested);
+                btn.setAttribute('aria-label', requested ? 'Cancel follow request' : 'Unfollow');
+                btn.disabled = false;
+                btn.removeAttribute('aria-busy');
+            }
+            if (typeof toast === 'function') toast(requested ? 'Follow request sent.' : 'Following! Their activity will appear here.', 'success');
             await refreshAll();
         } else {
-            if (btn) btn.disabled = false;
+            if (btn) { btn.disabled = false; btn.textContent = original; btn.removeAttribute('aria-busy'); }
             if (typeof toast === 'function') toast(d.error || 'Could not follow.', 'error');
         }
-    } catch (e) { if (btn) btn.disabled = false; console.error('Follow error:', e); }
+    } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = original; btn.removeAttribute('aria-busy'); }
+        if (typeof toast === 'function') toast('Could not connect. Please try following again.', 'error');
+    }
 }
 
 async function handleUnfollow(userId, isCancel) {

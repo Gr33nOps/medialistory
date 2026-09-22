@@ -26,7 +26,12 @@
   };
 
   function byId(id) { return document.getElementById(id); }
-  function esc(s) { return (typeof window.esc === 'function') ? window.esc(s) : String(s == null ? '' : s); }
+  function esc(s) {
+    if (typeof window.esc === 'function') return window.esc(s);
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
   // Signed out = no session token. isGuest() only exists on the games page.
   function guest() { return typeof getToken === 'function' ? !getToken() : true; }
 
@@ -317,10 +322,12 @@
     var cover = item.background_image || hero || '/img/no-image.svg';
 
     var released = item.released
+      // nosemgrep: javascript.browser.security.raw-html-concat.raw-html-concat -- formatted date is HTML-escaped by esc(), including its standalone fallback.
       ? '<span class="game-detail-date">' +
         esc(new Date(item.released).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })) +
         '</span>' : '';
     var rating = item.rating
+      // nosemgrep: javascript.browser.security.raw-html-concat.raw-html-concat -- numeric rating is HTML-escaped; the remaining markup is constant.
       ? '<span class="detail-rating" title="Average rating">★ ' + esc(Number(item.rating).toFixed(1)) +
         '<span class="dr-sub">/5</span></span>' : '';
 
@@ -330,6 +337,7 @@
        right-hand rows on desktop; on a phone it tucks next to the title and the
        details drop full-width below. Everything after the hero stays full width. */
     byId('titleBody').innerHTML =
+      // nosemgrep: javascript.browser.security.raw-html-concat.raw-html-concat -- catalog strings are escaped for text/quoted attributes; regression test covers hostile title and alt text.
       '<div class="game-detail-body">' +
         '<div class="title-hero">' +
           '<img src="' + esc(cover) + '" alt="' + esc(item.name) + ' cover" class="game-detail-cover title-hero-poster" loading="lazy" onerror="this.src=\'/img/no-image.svg\'">' +

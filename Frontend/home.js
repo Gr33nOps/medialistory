@@ -28,6 +28,18 @@ let isVerifying  = false;
 
 let userCustomLists = [];
 
+function restoreBrowsePage() {
+    var saved = Number(new URLSearchParams(window.location.search).get('page'));
+    if (Number.isInteger(saved) && saved > 1) currentPage = saved;
+}
+
+function saveBrowsePage() {
+    var url = new URL(window.location.href);
+    if (currentPage > 1) url.searchParams.set('page', String(currentPage));
+    else url.searchParams.delete('page');
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+}
+
 // Filter dropdown options come from enumerable IGDB resources only (genres,
 // platforms, game modes). Publisher/developer were dropped from the UI because
 // their option lists were built from the currently-loaded page - an incomplete,
@@ -181,6 +193,7 @@ function onClick(id, handler) {
 }
 
 function initPage() {
+    restoreBrowsePage();
     // Nav logout is owned by common.js mountAppNav (#navLogoutBtn).
     onClick('logoutBtn', logout);
     onClick('searchBtn', searchGames);
@@ -220,6 +233,7 @@ function initPage() {
             }
 
             currentPage  = 1;
+            saveBrowsePage();
             allGames     = [];
             hasMoreGames = true;
             retryCount   = 0;
@@ -490,10 +504,16 @@ async function fetchGames(replace) {
                 };
             });
 
+            if (currentFilters.search && typeof sortSearchResults === 'function') {
+                transformedGames = sortSearchResults(transformedGames, currentSort, currentSortOrder);
+            }
+
             allGames     = replace ? transformedGames : allGames.concat(transformedGames);
             hasMoreGames = data.length === apiGamesPerPage;
 
-            if (typeof applyQueryStateNotice === 'function') applyQueryStateNotice(queryStateFrom(response));
+            var queryState = queryStateFrom(response);
+            if (currentFilters.search && queryState) queryState.sortState = 'applied';
+            if (typeof applyQueryStateNotice === 'function') applyQueryStateNotice(queryState);
 
             collectFilterOptions(transformedGames);
             // Before rendering, so the first paint already carries the badges.
@@ -684,6 +704,7 @@ function applyFilters() {
         search:    currentFilters.search || ''
     };
     currentPage  = 1;
+    saveBrowsePage();
     allGames     = [];
     hasMoreGames = true;
     retryCount   = 0;
@@ -700,6 +721,7 @@ function resetFilters() {
     var keptSearch = currentFilters.search || '';
     currentFilters = keptSearch ? { search: keptSearch } : {};
     currentPage    = 1;
+    saveBrowsePage();
     allGames       = [];
     hasMoreGames   = true;
     retryCount     = 0;
@@ -711,18 +733,8 @@ function searchGames() {
     var searchTerm = document.getElementById('searchInput').value.trim();
     currentFilters.search = searchTerm;
 
-    var sortBySelect = document.getElementById('sortBy');
-    if (searchTerm) {
-        sortBySelect.value = 'popularity-desc';
-        currentSort      = 'popularity';
-        currentSortOrder = 'desc';
-    } else {
-        sortBySelect.value = 'popularity-desc';
-        currentSort      = 'popularity';
-        currentSortOrder = 'desc';
-    }
-
     currentPage  = 1;
+    saveBrowsePage();
     allGames     = [];
     hasMoreGames = true;
     retryCount   = 0;
@@ -735,6 +747,7 @@ window.__retryBrowse = function () { fetchGames(true); };
 function goToPreviousPage() {
     if (currentPage <= 1 || isLoading) return;
     currentPage--;
+    saveBrowsePage();
     allGames     = [];
     hasMoreGames = true;
     retryCount   = 0;
@@ -745,6 +758,7 @@ function goToPreviousPage() {
 function goToNextPage() {
     if (!hasMoreGames || isLoading) return;
     currentPage++;
+    saveBrowsePage();
     allGames   = [];
     retryCount = 0;
     window.scrollTo(0, 0);

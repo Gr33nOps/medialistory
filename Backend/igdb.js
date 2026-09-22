@@ -109,9 +109,13 @@ module.exports = (verifyToken, checkBanned, db) => {
     return (process.env.IGDB_CLIENT_ID || '').trim();
   }
 
+  function getClientSecret() {
+    return (process.env.IGDB_CLIENT_SECRET || '').trim();
+  }
+
   async function getAccessToken() {
     const clientId = getClientId();
-    const clientSecret = (process.env.IGDB_CLIENT_SECRET || '').trim();
+    const clientSecret = getClientSecret();
     const now = Date.now();
 
     if (cachedToken && now < tokenExpiresAt - 60_000) {
@@ -129,10 +133,17 @@ module.exports = (verifyToken, checkBanned, db) => {
       const tokenData = await tokenRes.json();
 
       if (!tokenRes.ok || !tokenData.access_token) {
+        // Twitch says why (e.g. "invalid client secret"); surface it without
+        // ever logging the secret itself, so a bad/mismatched credential is
+        // diagnosable from the Render logs instead of silently degrading.
+        console.error(
+          `[IGDB] Twitch token request failed (${tokenRes.status}): ${tokenData && tokenData.message ? tokenData.message : 'no access_token returned'}`
+        );
         const err = new Error('Failed to refresh Twitch/IGDB access token');
         err.details = tokenData;
         throw err;
       }
+      console.log('[IGDB] Twitch access token minted successfully');
 
       cachedToken = tokenData.access_token;
       tokenExpiresAt = now + (Number(tokenData.expires_in) || 5000) * 1000;
@@ -144,9 +155,21 @@ module.exports = (verifyToken, checkBanned, db) => {
     return '';
   }
 
+  function igdbRequest(path, clientId, accessToken, body) {
+    return fetch(`https://api.igdb.com/v4${path}`, {
+      method: 'POST',
+      headers: {
+        'Client-ID': clientId,
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/json'
+      },
+      body
+    });
+  }
+
   async function igdbFetch(path, body) {
     const clientId = getClientId();
-    const accessToken = await getAccessToken();
+    let accessToken = await getAccessToken();
 
     if (!clientId || !accessToken) {
       const err = new Error('IGDB credentials not configured');
@@ -159,16 +182,37 @@ module.exports = (verifyToken, checkBanned, db) => {
     }
 
     await respectRateLimit();
+    let res = await igdbRequest(path, clientId, accessToken, body);
+    if (!res.ok) console.warn(`[IGDB] ${path} returned ${res.status}`);
 
-    return fetch(`https://api.igdb.com/v4${path}`, {
-      method: 'POST',
-      headers: {
-        'Client-ID': clientId,
-        'Authorization': `Bearer ${accessToken}`,
-        'Accept': 'application/json'
-      },
-      body
-    });
+    /* A token minted elsewhere and pasted into IGDB_ACCESS_TOKEN has an expiry
+       we can't see, so on boot we optimistically trust it for six hours. When
+       it has actually expired (or was revoked), IGDB answers 401/403 and, until
+       that six-hour window lapses, getAccessToken keeps handing back the same
+       dead token - every game request degrades. So on an auth failure, if we
+       hold the client id + secret needed to mint our own, drop the cached token
+       and retry once with a fresh one. This is what lets a newly-added secret
+       take effect without waiting out the window or restarting the process. */
+    if ((res.status === 401 || res.status === 403) && clientId && getClientSecret()) {
+      console.warn('[IGDB] auth rejected; refreshing token and retrying once');
+      cachedToken = '';
+      tokenExpiresAt = 0;
+      delete process.env.IGDB_ACCESS_TOKEN; // stop re-seeding the stale token
+      accessToken = await getAccessToken();
+      if (accessToken) {
+        await respectRateLimit();
+        res = await igdbRequest(path, clientId, accessToken, body);
+        if (!res.ok) {
+          // Fresh token still rejected => the client id and secret don't belong
+          // to the same Twitch app (or IGDB access isn't enabled on it).
+          console.error(`[IGDB] ${path} still ${res.status} after token refresh - check that IGDB_CLIENT_ID and IGDB_CLIENT_SECRET are from the SAME Twitch app`);
+        }
+      }
+    } else if ((res.status === 401 || res.status === 403)) {
+      console.error('[IGDB] auth rejected and no IGDB_CLIENT_SECRET set to mint a fresh token');
+    }
+
+    return res;
   }
 
   function sendError(res, error, fallbackMessage) {
@@ -443,12 +487,22 @@ module.exports = (verifyToken, checkBanned, db) => {
     }
   }
 
+  /* Degraded fallback: serve games from our own catalog when IGDB is
+     unreachable. It has to honour the same sort contract as the live path -
+     the chosen field AND direction - or "Oldest" quietly shows the newest and
+     "Name Z-A" shows A-Z. It also mirrors the live browse floors: cover-first,
+     and released-only (no undated or still-upcoming rows) unless the caller
+     asked for the upcoming list, so "Newest" can't open on unreleased titles. */
   async function loadListFromDb(body) {
     if (!db) return null;
     try {
       const limit = clampInt(body.limit, 1, 50, 20);
       const offset = clampInt(body.offset, 0, 5000, 0);
       const search = sanitizeToken(body.search, 80);
+      const comingSoon = !!body.comingSoon || body.sort === 'coming';
+      const sortKey = ALLOWED_SORT[body.sort] ? body.sort : 'release';
+      const sortOrder = body.sortOrder === 'asc' ? 'asc' : 'desc';
+      const nowIso = new Date().toISOString();
 
       let q = db('games')
         .whereNotNull('igdb_id')
@@ -456,15 +510,37 @@ module.exports = (verifyToken, checkBanned, db) => {
 
       if (search) {
         q = q.where('name', 'ilike', `%${search}%`);
+      } else {
+        // Cover-first, like the live browse, so the grid isn't full of blank tiles.
+        q = q.whereNotNull('background_image');
       }
 
-      const sortKey = ALLOWED_SORT[body.sort] ? body.sort : 'release';
-      if (sortKey === 'name') {
-        q = q.orderBy('name', 'asc');
-      } else if (sortKey === 'rating' || sortKey === 'popularity') {
-        q = q.orderBy('metacritic_score', 'desc');
+      if (comingSoon) {
+        // Upcoming only, soonest first - the direction the coming-soon list expects.
+        q = q.whereNotNull('released').where('released', '>', nowIso).orderBy('released', 'asc');
       } else {
-        q = q.orderBy('released', 'desc');
+        // Every other browse is a released-games view; drop undated and future
+        // rows so date sorts behave. (Skipped during search so a title people
+        // typed in full still shows even if it is upcoming or undated.)
+        if (!search) q = q.whereNotNull('released').where('released', '<=', nowIso);
+
+        if (sortKey === 'name') {
+          q = q.orderBy('name', sortOrder);
+        } else if (sortKey === 'rating' || sortKey === 'popularity') {
+          // Keep rated titles first (Postgres would otherwise sort NULLs to the
+          // top on desc, burying every scored game). There's no true popularity
+          // column here, so the two lean on different signals to avoid being an
+          // identical list: Top Rated leads with critic score, Popularity with
+          // the community rating.
+          const dir = sortOrder === 'asc' ? 'asc nulls last' : 'desc nulls last';
+          q = q.orderByRaw(
+            sortKey === 'popularity'
+              ? `rating ${dir}, metacritic_score ${dir}`
+              : `metacritic_score ${dir}, rating ${dir}`
+          );
+        } else {
+          q = q.orderBy('released', sortOrder);
+        }
       }
 
       const rows = await q.limit(limit).offset(offset);

@@ -242,6 +242,19 @@ module.exports = (verifyToken, checkBanned, db) => {
       if (id) params.with_genres = String(id);
     }
 
+    /* Talk (10767), News (10763) and Reality (10764) shows carry enormous TMDB
+       popularity scores - a nightly talk show racks up more of it than most
+       scripted series ever will - so "Popular" and even "Newest" fill up with
+       The Tonight Show and Watch What Happens Live instead of the shows people
+       come here to track. Drop those genres from the default shows browse.
+       Skipped once the user picks an explicit genre, so choosing Reality (or
+       any genre) still returns it. */
+    if (isSeries && !genre) {
+      params.without_genres = params.without_genres
+        ? `${params.without_genres},10767,10763,10764`
+        : '10767,10763,10764';
+    }
+
     // ── Advanced filters (discover-only; TMDB /search ignores these) ──────────
     const year = clampInt(body.year, 1874, new Date().getFullYear() + 10, 0);
     if (year) {

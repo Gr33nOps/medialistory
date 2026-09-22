@@ -1829,6 +1829,39 @@
    disabled, not hidden, because a control that vanishes reads as a bug - and a
    line underneath says why, with the one action that gives them back. */
 
+function sortSearchResults(items, sortKey, sortOrder) {
+    if (!Array.isArray(items)) return [];
+    var direction = sortOrder === 'asc' ? 1 : -1;
+    var key = sortKey === 'coming' ? 'release' : sortKey;
+    if (sortKey === 'coming') direction = 1;
+
+    function value(item) {
+        if (key === 'name') return String((item && item.name) || '');
+        if (key === 'release') {
+            var rawDate = item && (item.released || item.release_date || item.first_air_date);
+            if (!rawDate && item && item.first_release_date) return Number(item.first_release_date) * 1000;
+            var timestamp = rawDate ? new Date(rawDate).getTime() : NaN;
+            return Number.isFinite(timestamp) ? timestamp : null;
+        }
+        if (key === 'rating') {
+            var rating = item && (item.rating != null ? item.rating : item.metacritic_score);
+            return Number.isFinite(Number(rating)) ? Number(rating) : null;
+        }
+        var popularity = item && (item.popularity != null ? item.popularity :
+            item.rating_count != null ? item.rating_count : item.total_rating_count);
+        return Number.isFinite(Number(popularity)) ? Number(popularity) : null;
+    }
+
+    return items.slice().sort(function (a, b) {
+        var av = value(a), bv = value(b);
+        if (key === 'name') return direction * av.localeCompare(bv, undefined, { sensitivity: 'base' });
+        if (av == null && bv == null) return String(a.name || '').localeCompare(String(b.name || ''));
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        return av === bv ? String(a.name || '').localeCompare(String(b.name || '')) : direction * (av - bv);
+    });
+}
+
 function applyQueryStateNotice(state) {
     var notice = document.getElementById('queryStateNotice');
     if (!notice) {
@@ -1868,7 +1901,7 @@ function applyQueryStateNotice(state) {
     // Keep the explanation visible until the search is cleared.
     notice.hidden = !(sortDead || filtersOff);
     notice.textContent = filtersOff
-      ? 'Search uses best match. Clear your search to use filters and sorting.'
+      ? (sortDead ? 'Search uses best match. Clear your search to use filters and sorting.' : 'Search filters are unavailable. Sorting still applies.')
       : sortDead ? 'Search results are ordered by best match. Clear your search to sort.' : '';
     var filterPanel = document.getElementById('filterSection');
     if (filtersOff && filterPanel) filterPanel.classList.add('hidden');

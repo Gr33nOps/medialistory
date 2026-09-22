@@ -128,6 +128,14 @@ function clearProfileSkeleton() {
 }
 
 function displayProfile(user) {
+    var greeting = document.getElementById('profileGreeting');
+    if (greeting) greeting.textContent = user.display_name || user.username || 'Your profile';
+    var bio = document.getElementById('profileBio');
+    if (bio) { bio.textContent = user.bio || ''; bio.hidden = !user.bio; }
+    var publicLink = document.getElementById('publicProfileLink');
+    if (publicLink) publicLink.href = 'userProfile.html?userId=' + encodeURIComponent(user.id);
+    var display = document.getElementById('profileDisplay');
+    if (display) display.parentElement.setAttribute('data-accent', ['movie', 'series', 'anime', 'game'].includes(user.accent) ? user.accent : 'movie');
     var avatarUrl = user.avatar_url ||
         'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.display_name || user.username) + '&size=200&background=3b82f6&color=fff&bold=true';
 
@@ -644,7 +652,7 @@ function wireManagers() {
 function mgShowcase(items, emptyMsg) {
     if (!items.length) return '<p class="pf-empty">' + mgEsc(emptyMsg) + '</p>';
     return '<div class="dash-scroller">' + items.map(function (it) {
-        var ref = it.game_id || it.ref || mgRef(it);
+        var ref = it.media_ref || it.ref || mgRef(it);
         var img = it.background_image || it.img || MG_FALLBACK;
         return '<a class="dash-card" href="title.html?ref=' + encodeURIComponent(ref) + '" title="' + mgEsc(it.name) + '">' +
             '<div class="dash-card-poster"><img src="' + mgEsc(img) + '" alt="' + mgEsc(it.name) + '" loading="lazy" onerror="this.src=\'' + MG_FALLBACK + '\'"></div>' +
