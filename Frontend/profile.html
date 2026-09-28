@@ -75,19 +75,18 @@
                     <div class="data-tools-row">
                         <button id="importDataBtn" class="btn btn-secondary" type="button">Import a list</button>
                         <div class="data-export">
-                            <label class="sr-only" for="exportCategory">Export category</label>
-                            <select id="exportCategory" class="filter-select" aria-label="Export category">
-                                <option value="">Everything</option>
-                                <option value="movie">Movies only</option>
-                                <option value="series">Shows only</option>
-                                <option value="anime">Anime only</option>
-                                <option value="game">Games only</option>
+                            <label class="sr-only" for="exportFormat">Export format</label>
+                            <select id="exportFormat" class="filter-select" aria-label="Export format">
+                                <option value="portable">Portable CSV · all media</option>
+                                <option value="letterboxd">Letterboxd CSV · movies</option>
+                                <option value="myanimelist">MyAnimeList XML · anime</option>
+                                <option value="medialistory">MediaListory JSON · full backup</option>
                             </select>
-                            <button id="exportDataBtn" class="btn btn-secondary" type="button">Export</button>
+                            <button id="exportDataBtn" class="btn btn-secondary" type="button">Download export</button>
                         </div>
                         <button id="backupDataBtn" class="btn btn-secondary" type="button">Download full backup</button>
                     </div>
-                    <p class="data-tools-note">Export one category (e.g. just your movies) to move it to another site, or download a full backup of your whole account: collection and lists. To restore a backup, use <strong>Import</strong> with Auto-detect.</p></details>
+                    <p class="data-tools-note">Use Portable CSV for spreadsheets and other trackers, Letterboxd CSV for movies, or MyAnimeList XML for anime. The JSON backup keeps your complete collection and custom lists. Imports are previewed before anything is added.</p></details>
 
                 <details class="data-tools danger-zone"><summary>Account management <span>Clear data or delete your account</span></summary>
                     <div class="data-tools-row">
@@ -281,6 +280,7 @@
 
     <script src="common.js"></script>
     <script src="experience.js"></script>
+    <script src="transfer.js"></script>
     <script src="profile.js"></script>
     <script src="import.js"></script>
 </body>

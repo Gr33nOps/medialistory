@@ -184,8 +184,7 @@
   var backendReadyPromise = new Promise(function (r) { _resolveReady = r; });
   var pendingApiCalls = 0;      // in-flight apiFetch requests
   var apiFetchStarted = false;  // has this page made any real data call yet
-  var _onApiActivity = null;    // mountBackendWake hooks this to react to data calls
-  var _onApiIdle = null;        // ...and to react when the last one settles
+  var apiResponseCache = new Map();
   function markBackendReady() {
     if (backendReady) return;
     backendReady = true;
@@ -217,6 +216,16 @@
       .then(function (ok) { if (timer) clearTimeout(timer); if (ok) markBackendReady(); return ok; });
   }
 
+  // OAuth has to leave the frontend and navigate to the API origin. Wake that
+  // origin first so a sleeping Render service never replaces our sign-in page
+  // with its generic holding screen. mountBackendWake may already be polling;
+  // both paths resolve through the same readiness promise.
+  function warmBackendForNavigation(capMs) {
+    if (!apiIsCrossOrigin() || backendReady) return Promise.resolve(true);
+    pingHealth(8000);
+    return waitForBackend(capMs || 75000);
+  }
+
   function esc(str) {
     if (str == null) return '';
     return String(str)
@@ -239,6 +248,17 @@
    */
   async function ensureSession() {
     var had = getToken();
+    // A full page navigation creates a new JS context, but it should not force a
+    // second auth request seconds after the previous page already verified the
+    // same token. API routes still validate every request server-side; this is
+    // only a short client-side shortcut for the duplicate bootstrap check.
+    try {
+      var verifiedAt = Number(localStorage.getItem('mgl:sessionVerifiedAt') || 0);
+      var storedUser = getStoredUser();
+      if (had && storedUser && verifiedAt && Date.now() - verifiedAt < 60 * 1000) {
+        return { token: had, user: storedUser };
+      }
+    } catch (_) {}
     try {
       var headers = {};
       if (had) headers.Authorization = 'Bearer ' + had;
@@ -252,6 +272,7 @@
         if (data.token) localStorage.setItem('authToken', data.token);
         if (data.user) localStorage.setItem('currentUser', JSON.stringify(data.user));
         localStorage.setItem('lastActivity', Date.now().toString());
+        localStorage.setItem('mgl:sessionVerifiedAt', Date.now().toString());
         return data;
       }
       // Only clear when the server rejected credentials we actually sent.
@@ -299,12 +320,24 @@
   }
 
   function apiFetch(path, options) {
-    var opts = options || {};
+    var supplied = options || {};
+    var cacheMs = Math.max(0, Number(supplied.mglCacheMs) || 0);
+    var opts = Object.assign({}, supplied);
+    delete opts.mglCacheMs;
     opts.headers = authHeaders(opts.headers || {});
     // Cross-origin API (direct Render) needs include; same-origin keeps cookies simple.
     opts.credentials = opts.credentials || (apiIsCrossOrigin() ? 'include' : 'same-origin');
     opts.cache = opts.cache || 'no-store';
     var method = String(opts.method || 'GET').toUpperCase();
+    var cacheKey = cacheMs ? [method, path, typeof opts.body === 'string' ? opts.body : ''].join('|') : '';
+    if (cacheKey) {
+      var cached = apiResponseCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) {
+        markBackendReady();
+        return Promise.resolve(cached.response.clone());
+      }
+      if (cached) apiResponseCache.delete(cacheKey);
+    }
     // Only idempotent GETs are safe to auto-retry, and only when the caller isn't
     // managing its own abort signal (retrying a spent controller would fail).
     var canRetry = method === 'GET' && !opts.signal && apiIsCrossOrigin();
@@ -315,7 +348,6 @@
     // Every data call drives the top bar, so there is always a visible sign
     // that something is loading, not only on full page navigations.
     if (pendingApiCalls === 1) startTopProgress();
-    if (_onApiActivity) { try { _onApiActivity(); } catch (_) {} }
     var settled = false;
     function fin() {
       if (settled) return;
@@ -323,11 +355,13 @@
       pendingApiCalls = Math.max(0, pendingApiCalls - 1);
       if (pendingApiCalls === 0) {
         finishTopProgress();
-        if (_onApiIdle) { try { _onApiIdle(); } catch (_) {} }
       }
     }
     return fetch(API_BASE + path, opts).then(function (res) {
       if (res && res.ok) markBackendReady();
+      if (cacheKey && res && res.ok && typeof res.clone === 'function') {
+        apiResponseCache.set(cacheKey, { response: res.clone(), expiresAt: Date.now() + cacheMs });
+      }
       fin();
       return res;
     }).catch(function (err) {
@@ -351,6 +385,7 @@
     localStorage.removeItem('currentUser');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('lastActivity');
+    localStorage.removeItem('mgl:sessionVerifiedAt');
   }
 
   function getDensity() {
@@ -840,6 +875,7 @@
     var user = getStoredUser();
 
     var isGuest = !getToken();
+    el.setAttribute('data-auth', isGuest ? 'guest' : 'signed-in');
     var SEARCH_SVG = '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>';
 
     // Category tabs (one connected group; only the active one is filled).
@@ -955,6 +991,16 @@
     // Mobile drawer toggle (hamburger opens category tabs + user links).
     var toggle = document.getElementById('navToggle');
     if (toggle) {
+      var mobileNav = typeof global.matchMedia === 'function' ? global.matchMedia('(max-width: 600px)') : null;
+      var primaryNav = el.querySelector('.nav-primary');
+      function syncDrawerAccess(open) {
+        var collapsedMobile = !!(mobileNav && mobileNav.matches && !open);
+        if (!primaryNav) return;
+        if (collapsedMobile) primaryNav.setAttribute('inert', '');
+        else primaryNav.removeAttribute('inert');
+        primaryNav.setAttribute('aria-hidden', collapsedMobile ? 'true' : 'false');
+      }
+      syncDrawerAccess(false);
       el.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && el.classList.contains('is-open')) { toggle.click(); toggle.focus(); }
       });
@@ -963,6 +1009,7 @@
         toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
         toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
         document.body.classList.toggle('nav-drawer-open', open);
+        syncDrawerAccess(open);
       });
       el.querySelectorAll('.nav-tab, .nav-link, .nav-menu-item, .nav-cta').forEach(function (node) {
         node.addEventListener('click', function () {
@@ -970,8 +1017,20 @@
           toggle.setAttribute('aria-expanded', 'false');
           toggle.setAttribute('aria-label', 'Open menu');
           document.body.classList.remove('nav-drawer-open');
+          syncDrawerAccess(false);
         });
       });
+      if (mobileNav && typeof mobileNav.addEventListener === 'function') {
+        mobileNav.addEventListener('change', function (event) {
+          if (!event.matches) {
+            el.classList.remove('is-open');
+            toggle.setAttribute('aria-expanded', 'false');
+            toggle.setAttribute('aria-label', 'Open menu');
+            document.body.classList.remove('nav-drawer-open');
+          }
+          syncDrawerAccess(el.classList.contains('is-open'));
+        });
+      }
     }
   }
 
@@ -1489,9 +1548,9 @@
     } catch (_) {}
     if (recentlyReady) markBackendReady();
 
-    var GRACE_MS = 2500, MAX_MS = 75000, POLL_MS = 2500, SLOW_MS = 4000;
+    var GRACE_MS = 2500, MAX_MS = 75000, POLL_MS = 2500;
     var startedAt = Date.now();
-    var el = null, hideTimer = null, elapsedTimer = null, stopped = false, slowTimer = null;
+    var el = null, hideTimer = null, elapsedTimer = null, stopped = false;
 
     var COPY = {
       waking: {
@@ -1585,40 +1644,18 @@
       });
     }
 
-    // A request only earns a notice once it has actually been slow, so anything
-    // that answers promptly never draws the panel and the UI stays quiet.
-    function onApiStart() {
-      if (slowTimer) return;
-      slowTimer = setTimeout(function () {
-        slowTimer = null;
-        if (pendingApiCalls > 0 && (!el || el.hidden)) { startedAt = Date.now(); setState('waking'); }
-      }, SLOW_MS);
-    }
-    // Everything settled: drop the watchdog and close the panel if it had opened.
-    function onApiIdle() {
-      if (slowTimer) { clearTimeout(slowTimer); slowTimer = null; }
-      if (el && !el.hidden && el.getAttribute('data-state') === 'waking') {
-        setState('ready');
-        if (hideTimer) clearTimeout(hideTimer);
-        hideTimer = setTimeout(hide, 700);
-      }
-    }
-
-    _onApiActivity = onApiStart;
-    _onApiIdle = onApiIdle;
+    // Ordinary slow requests use their local skeleton/spinner. The server panel
+    // belongs exclusively to the initial health probe; wiring it to all API
+    // activity made searches, image loading, and tab switches look like cold
+    // starts even though the backend was already awake.
     document.addEventListener('mgl:backend-ready', onReady);
-    // Page scripts run while the document is still parsing, so a page like the
-    // dashboard has already fired its data calls by the time this mounts on
-    // DOMContentLoaded. Those calls saw a null _onApiActivity and never armed the
-    // watchdog, so a backend that was assumed warm but had gone cold left the
-    // skeletons up with no notice at all. Arm it now for anything still waiting.
-    if (pendingApiCalls > 0) onApiStart();
     // Only a genuinely cold start polls /health; a warm backend stays silent.
     if (!recentlyReady) { setTimeout(maybeShow, GRACE_MS); poll(); }
   }
   global.mountBackendWake = mountBackendWake;
   global.isBackendReady = isBackendReady;
   global.waitForBackend = waitForBackend;
+  global.warmBackendForNavigation = warmBackendForNavigation;
   global.backendReadyPromise = backendReadyPromise;
 
   // ── Aurora atmosphere ──────────────────────────────────────────────────────

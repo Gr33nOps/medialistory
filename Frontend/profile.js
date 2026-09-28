@@ -4,8 +4,9 @@ let authToken   = localStorage.getItem('authToken');
 let currentUser = (typeof getStoredUser === 'function') ? getStoredUser() : null;
 
 (async function bootProfile() {
+    var restored = null;
     if (typeof ensureSession === 'function') {
-        try { await ensureSession(); } catch (_) {}
+        try { restored = await ensureSession(); } catch (_) {}
     }
     authToken = localStorage.getItem('authToken');
     currentUser = (typeof getStoredUser === 'function') ? getStoredUser() : null;
@@ -13,6 +14,7 @@ let currentUser = (typeof getStoredUser === 'function') ? getStoredUser() : null
         window.location.href = (typeof authUrlWithNext === 'function' ? authUrlWithNext() : 'auth.html');
         return;
     }
+    if (restored && restored.user) { currentUser = restored.user; initPage(); return; }
     verifyToken();
 })();
 
@@ -52,12 +54,12 @@ function initPage() {
     var exportBtn = document.getElementById('exportDataBtn');
     if (exportBtn) {
         exportBtn.addEventListener('click', function () {
-            var sel = document.getElementById('exportCategory');
-            exportMyData(sel ? sel.value : '');
+            var sel = document.getElementById('exportFormat');
+            exportMyData(sel ? sel.value : 'portable', exportBtn);
         });
     }
     var backupBtn = document.getElementById('backupDataBtn');
-    if (backupBtn) backupBtn.addEventListener('click', function () { exportMyData(''); });
+    if (backupBtn) backupBtn.addEventListener('click', function () { exportMyData('medialistory', backupBtn); });
 
     var densitySelect = document.getElementById('densitySelect');
     if (densitySelect && typeof getDensity === 'function') {
@@ -399,13 +401,13 @@ async function handlePasswordChange(e) {
     }
 }
 
-async function exportMyData(category) {
-    var CAT_FILE = { movie: 'movies', series: 'shows', anime: 'anime', game: 'games' };
-    var qs = category ? ('?category=' + encodeURIComponent(category)) : '';
+async function exportMyData(format, button) {
+    format = format || 'portable';
     try {
-        var r = await fetch((typeof API_BASE !== 'undefined' ? API_BASE : '/api') + '/user/export' + qs, {
-            headers: { 'Authorization': 'Bearer ' + authToken }
-        });
+        if (typeof setBtnLoading === 'function') setBtnLoading(button, true, 'Preparing…');
+        var r = typeof apiFetch === 'function'
+            ? await apiFetch('/user/export')
+            : await fetch((typeof API_BASE !== 'undefined' ? API_BASE : '/api') + '/user/export', { headers: { 'Authorization': 'Bearer ' + authToken } });
         if (!r.ok) {
             var d = await r.json().catch(function() { return {}; });
             var msg = typeof describeApiError === 'function'
@@ -415,20 +417,26 @@ async function exportMyData(category) {
             else notify(msg, 'error');
             return;
         }
-        var blob = await r.blob();
+        var backup = await r.json();
+        var file = window.MGLTransfer
+            ? window.MGLTransfer.buildExport(backup, format)
+            : { filename: 'medialistory-backup.json', type: 'application/json', text: JSON.stringify(backup, null, 2) };
+        var blob = new Blob([file.text], { type: file.type });
         var url = URL.createObjectURL(blob);
         var a = document.createElement('a');
         a.href = url;
-        a.download = category ? ('medialistory-' + (CAT_FILE[category] || category) + '.json') : 'medialistory-backup.json';
+        a.download = file.filename;
         document.body.appendChild(a);
         a.click();
         a.remove();
         URL.revokeObjectURL(url);
-        var okMsg = category ? ('Exported your ' + (CAT_FILE[category] || category)) : 'Full backup downloaded';
+        var okMsg = format === 'medialistory' ? 'Full backup downloaded' : 'Export downloaded';
         if (typeof toast === 'function') toast(okMsg, 'success');
     } catch (e) {
         if (typeof toast === 'function') toast('Network error exporting data', 'error');
         else notify('Network error exporting data', 'error');
+    } finally {
+        if (typeof setBtnLoading === 'function') setBtnLoading(button, false);
     }
 }
 

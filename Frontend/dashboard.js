@@ -82,6 +82,13 @@
     }).join('') + '</div>';
   }
 
+  function guestCategoriesHtml() {
+    var hrefs = { movie: 'movies.html', series: 'series.html', anime: 'anime.html', game: 'home.html' };
+    return '<nav class="dash-hero-counts dash-guest-categories" aria-label="Browse by category">' + CAT_ORDER.map(function (cat) {
+      return '<a class="cat-stat" data-cat="' + cat + '" href="' + hrefs[cat] + '"><span class="cs-label">' + LABEL_PLURAL[cat] + '</span></a>';
+    }).join('') + '</nav>';
+  }
+
   function renderHero(weekCount, byCat) {
     var el = document.getElementById('dashHero');
     if (!el) return;
@@ -89,6 +96,7 @@
       el.innerHTML = '<div class="dash-hero-inner">' +
         '<p class="eyebrow">One home for every obsession</p><h2 class="dash-hero-title">Great stories.<br>Your story.</h2>' +
         '<p class="dash-hero-sub">Track movies, shows, anime, and games. Rate them, follow your episode progress, and keep one library.</p>' +
+        guestCategoriesHtml() +
         '<div class="dash-hero-cta">' +
           '<a class="btn btn-primary" href="auth.html">Create a free account</a>' +
           '<a class="btn btn-secondary" href="movies.html">Browse without an account</a>' +
@@ -111,9 +119,11 @@
       '<h2 class="dash-hero-title">Welcome back, ' + esc(name) + '</h2>' +
       '<p class="dash-hero-sub">' + esc(sub) + '</p>' +
       (total ? catCountsHtml(byCat) : '') +
-      '<div class="dash-hero-cta"><a class="btn btn-primary" href="library.html">Open my library <span aria-hidden="true">↗</span></a><a class="btn btn-secondary" href="library.html?tab=lists">My collections</a></div>' +
+      '<div class="dash-hero-cta"><a class="btn btn-primary" href="library.html">Open my library <span aria-hidden="true">↗</span></a></div>' +
     '</div>';
   }
+  // Small public seam for the real DOM renderer used by unit tests.
+  window.renderDashboardHeroForTest = renderHero;
 
   // ── Continue (in-progress, every category) ──────────────────────────────
   var libCache = [];

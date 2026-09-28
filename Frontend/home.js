@@ -105,8 +105,9 @@ function promptSignIn(message) {
 }
 
 (async function bootHome() {
+    var restored = null;
     if (typeof ensureSession === 'function') {
-        try { await ensureSession(); } catch (_) {}
+        try { restored = await ensureSession(); } catch (_) {}
     }
     authToken = localStorage.getItem('authToken');
     currentUser = readStoredUser();
@@ -115,6 +116,7 @@ function promptSignIn(message) {
         initPage();
         return;
     }
+    if (restored && restored.user) { currentUser = restored.user; initPage(); return; }
     verifyToken();
 })();
 
@@ -325,9 +327,9 @@ function initPage() {
 async function loadUserCustomLists() {
     if (isGuest()) { userCustomLists = []; return; }
     try {
-        var r = await fetch(`${API_BASE}/user/lists`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
-        });
+        var r = typeof apiFetch === 'function'
+            ? await apiFetch('/user/lists')
+            : await fetch(`${API_BASE}/user/lists`, { headers: { 'Authorization': `Bearer ${authToken}` } });
         if (r.ok) {
             var d = await r.json();
             userCustomLists = d.lists || [];
@@ -339,31 +341,29 @@ async function loadUserCustomLists() {
 
 async function loadIGDBFilters() {
     try {
-        var genresResponse = await fetch(`${API_BASE}/igdb/genres`, {
-            method: 'POST',
-            headers: authHeaders({ 'Content-Type': 'application/json' }),
-            body: '{}'
-        });
+        var request = function (path) {
+            if (typeof apiFetch === 'function') return apiFetch(path, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+                mglCacheMs: 10 * 60 * 1000
+            });
+            return fetch(API_BASE + path, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: '{}' });
+        };
+        var filterResponses = await Promise.all([
+            request('/igdb/genres'), request('/igdb/platforms'), request('/igdb/game_modes')
+        ]);
+        var genresResponse = filterResponses[0];
         if (genresResponse.ok) {
             var genres = await genresResponse.json();
             genres.forEach(function(genre) { allFilterOptions.genres.add(genre.name); });
         }
 
-        var platformsResponse = await fetch(`${API_BASE}/igdb/platforms`, {
-            method: 'POST',
-            headers: authHeaders({ 'Content-Type': 'application/json' }),
-            body: '{}'
-        });
+        var platformsResponse = filterResponses[1];
         if (platformsResponse.ok) {
             var platforms = await platformsResponse.json();
             platforms.forEach(function(platform) { allFilterOptions.platforms.add(platform.name); });
         }
 
-        var modesResponse = await fetch(`${API_BASE}/igdb/game_modes`, {
-            method: 'POST',
-            headers: authHeaders({ 'Content-Type': 'application/json' }),
-            body: '{}'
-        });
+        var modesResponse = filterResponses[2];
         if (modesResponse.ok) {
             var modes = await modesResponse.json();
             modes.forEach(function(mode) { if (mode && mode.name) allFilterOptions.gameModes.add(mode.name); });
@@ -415,10 +415,7 @@ async function fetchGames(replace) {
 
         var sortKey = isComingSoon ? 'coming' : (isPopularity ? 'popularity' : currentSort);
 
-        var response = await fetch(`${API_BASE}/igdb/games`, {
-            method: 'POST',
-            headers: authHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({
+        var gamePayload = JSON.stringify({
                 search: currentFilters.search || undefined,
                 genre: currentFilters.genre || undefined,
                 platform: currentFilters.platform || undefined,
@@ -430,7 +427,13 @@ async function fetchGames(replace) {
                 comingSoon: isComingSoon,
                 limit: apiGamesPerPage,
                 offset: offset
-            })
+            });
+        var response = typeof apiFetch === 'function' ? await apiFetch('/igdb/games', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }, body: gamePayload,
+            mglCacheMs: 2 * 60 * 1000
+        }) : await fetch(`${API_BASE}/igdb/games`, {
+            method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: gamePayload
         });
 
         var data = await response.json();

@@ -24,8 +24,9 @@ let _clPendingDeleteId = null;
 let _updateScoreBound = false;
 
 (async function bootMyList() {
+    var restored = null;
     if (typeof ensureSession === 'function') {
-        try { await ensureSession(); } catch (_) {}
+        try { restored = await ensureSession(); } catch (_) {}
     }
     authToken = localStorage.getItem('authToken');
     currentUser = (typeof getStoredUser === 'function') ? getStoredUser() : null;
@@ -33,6 +34,7 @@ let _updateScoreBound = false;
         window.location.href = (typeof authUrlWithNext === 'function' ? authUrlWithNext() : 'auth.html');
         return;
     }
+    if (restored && restored.user) { currentUser = restored.user; initPage(); return; }
     verifyToken();
 })();
 

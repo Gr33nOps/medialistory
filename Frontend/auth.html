@@ -35,6 +35,22 @@
 <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
     <div id="main-content" tabindex="-1" class="auth-container">
+      <div class="auth-shell">
+        <aside class="auth-intro" aria-label="About MediaListory">
+            <a class="auth-brand" href="dashboard.html"><img src="favicon.svg" alt="" width="34" height="34">MediaListory</a>
+            <div class="auth-intro-copy">
+                <p class="eyebrow">Your watch-and-play history</p>
+                <h2>Keep every story you love in one place.</h2>
+                <p>Build one personal library across movies, shows, anime, and games. Browsing is always open, even without an account.</p>
+                <nav class="auth-category-links" aria-label="Browse without signing in">
+                    <a data-cat="movie" href="movies.html">Movies</a>
+                    <a data-cat="series" href="series.html">Shows</a>
+                    <a data-cat="anime" href="anime.html">Anime</a>
+                    <a data-cat="game" href="home.html">Games</a>
+                </nav>
+            </div>
+            <a class="auth-browse-link" href="dashboard.html">Browse without an account <span aria-hidden="true">→</span></a>
+        </aside>
         <div class="auth-card">
             <div class="auth-header">
                 <h1>MediaListory</h1>
@@ -59,8 +75,8 @@
                 <div class="oauth-divider" aria-hidden="true"><span>or</span></div>
             </div>
 
-            <div id="oauthStatus" class="hidden" style="text-align:center;padding:40px 30px;">
-                <div class="loading-indicator"><div class="spinner"></div><p>Finishing sign-in…</p></div>
+            <div id="oauthStatus" class="hidden" style="text-align:center;padding:40px 30px;" role="status" aria-live="polite">
+                <div class="loading-indicator"><div class="spinner"></div><p data-oauth-status-message>Finishing sign-in…</p><small>Your sign-in page will open as soon as the secure server is ready.</small></div>
             </div>
 
             <form id="oauthUsernameForm" class="auth-form hidden" aria-label="Choose username">
@@ -237,6 +253,7 @@
                 <button type="button" data-action="show-login" class="btn btn-primary" style="width:100%;">Go to Login</button>
             </div>
         </div>
+      </div>
     </div>
 
     <script src="common.js"></script>

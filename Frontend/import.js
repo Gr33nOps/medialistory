@@ -361,8 +361,7 @@
           '<button type="button" class="imp-close" id="impClose" aria-label="Close">&times;</button></div>' +
         '<div class="imp-body">' +
           '<div id="impPhaseInput">' +
-            '<p class="imp-help">Paste a <strong>CSV</strong> (e.g. a Letterboxd, MAL or Trakt export) or a MediaListory JSON export, or choose a file. ' +
-            'CSV columns we look for: <em>title, type, status, score</em>.</p>' +
+            '<p class="imp-help">Choose or paste a <strong>CSV, JSON, or XML</strong> export. MediaListory recognizes its own backups plus common Letterboxd, IMDb, Trakt, and MyAnimeList layouts, then lets you review every match.</p>' +
             '<label class="imp-field"><span>What are you importing?</span>' +
               '<select id="impDefaultType" class="form-input">' +
                 '<option value="auto" selected>Auto-detect from the file</option>' +
@@ -371,7 +370,7 @@
               '</select></label>' +
             '<p class="imp-help" style="margin-top:-4px;">Importing from a single-category site (Letterboxd → Movies, MAL → Anime, a games export → Games)? Pick that category. A mixed export (e.g. movies + shows, or a MediaListory backup) can use Auto-detect, and each title still lands in its own category.</p>' +
             '<textarea id="impText" class="form-input imp-textarea" placeholder="Paste CSV or JSON here…"></textarea>' +
-            '<div class="imp-orfile"><input type="file" id="impFile" accept=".csv,.json,.txt"></div>' +
+            '<div class="imp-orfile"><input type="file" id="impFile" accept=".csv,.json,.xml,.txt,text/csv,application/json,application/xml"></div>' +
             '<div id="impInputMsg" class="imp-msg"></div>' +
             '<div class="imp-actions"><button type="button" class="btn btn-primary" id="impParseBtn">Preview matches</button></div>' +
           '</div>' +
@@ -448,13 +447,11 @@
     if (!text) { msg.textContent = 'Paste some CSV or JSON first, or choose a file.'; msg.className = 'imp-msg error'; return; }
 
     try {
-      if (text[0] === '{' || text[0] === '[') {
-        parsedRows = rowsFromJSON(JSON.parse(text), defaultType);
-      } else {
-        parsedRows = rowsFromCSV(text, defaultType);
-      }
+      parsedRows = global.MGLTransfer
+        ? global.MGLTransfer.parseImport(text, defaultType)
+        : (text[0] === '{' || text[0] === '[' ? rowsFromJSON(JSON.parse(text), defaultType) : rowsFromCSV(text, defaultType));
     } catch (err) {
-      msg.textContent = 'Could not read that. If it is CSV, make sure it is comma-separated.'; msg.className = 'imp-msg error'; return;
+      msg.textContent = 'Could not read that export. Use CSV, JSON, or MyAnimeList XML.'; msg.className = 'imp-msg error'; return;
     }
     if (!parsedRows.length) { msg.textContent = 'No rows found to import.'; msg.className = 'imp-msg error'; return; }
     if (parsedRows.length > 100) parsedRows = parsedRows.slice(0, 100);
@@ -595,10 +592,13 @@
     var added = 0, dupe = 0, failed = 0, rated = 0;
     async function addOne(m) {
       try {
+        var payload = global.MGLTransfer
+          ? global.MGLTransfer.buildImportPayload(m.row, m.gameData)
+          : { game_data: m.gameData, status: m.row.status, score: m.row.score };
         var res = await global.apiFetch('/user/games', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ game_data: m.gameData, status: m.row.status, score: m.row.score })
+          body: JSON.stringify(payload)
         });
         if (res.ok) {
           /* The server folds an anime that is already a season of something in
