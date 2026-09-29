@@ -641,10 +641,11 @@ module.exports = (db, verifyToken, checkBanned, deps = {}) => {
         .first();
       const position = (maxPos.maxPos || 0) + 1;
 
+      // No user_id here: custom_list_games has no such column (see
+      // DB/schema.postgres.sql). Ownership is the list's, checked above.
       await db('custom_list_games').insert({
         list_id:  list.id,
         game_id:  dbGameId,
-        user_id:  req.userId,
         note:     cleanNote(note),
         position,
         status:   status || null,
@@ -718,35 +719,50 @@ module.exports = (db, verifyToken, checkBanned, deps = {}) => {
       const cat = ['movie', 'series', 'anime', 'game'].includes(req.query.category)
         ? req.query.category : null;
 
-      let collectionQ = db('user_game_lists as ugl')
-        .join('games', 'ugl.game_id', 'games.id')
-        .leftJoin('media_external_ids as export_ids', function () {
-          this.on('export_ids.media_ref', '=', 'games.game_id')
-            .andOn(db.raw("export_ids.source = 'mal'"));
-        })
-        .where('ugl.user_id', req.userId);
-      if (cat) collectionQ = collectionQ.where('games.media_type', cat);
-      const collection = await collectionQ
-        .select(
-          'games.game_id',
-          'games.igdb_id',
-          'games.tmdb_id',
-          'games.media_type',
-          'games.name',
-          'games.provider',
-          'games.provider_id',
-          'games.released',
-          'games.episode_count',
-          'export_ids.external_id as mal_id',
-          'ugl.status',
-          'ugl.score',
-          'ugl.notes',
-          'ugl.progress',
-          'ugl.progress_hours',
-          'ugl.created_at',
-          'ugl.updated_at'
-        )
-        .orderBy('ugl.created_at', 'desc');
+      /* The MyAnimeList id comes from media_external_ids, which only exists
+         once DB/migrations/add-external-id-map.sql has been applied. Without
+         it the export still has to work, so it falls back to mal_id = null
+         rather than failing the whole backup. */
+      const collectionQuery = (withMalIds) => {
+        let q = db('user_game_lists as ugl')
+          .join('games', 'ugl.game_id', 'games.id')
+          .where('ugl.user_id', req.userId);
+        if (withMalIds) {
+          q = q.leftJoin('media_external_ids as export_ids', function () {
+            this.on('export_ids.media_ref', '=', 'games.game_id')
+              .andOn(db.raw("export_ids.source = 'mal'"));
+          });
+        }
+        if (cat) q = q.where('games.media_type', cat);
+        return q
+          .select(
+            'games.game_id',
+            'games.igdb_id',
+            'games.tmdb_id',
+            'games.media_type',
+            'games.name',
+            'games.provider',
+            'games.provider_id',
+            'games.released',
+            'games.episode_count',
+            withMalIds ? 'export_ids.external_id as mal_id' : db.raw('NULL as mal_id'),
+            'ugl.status',
+            'ugl.score',
+            'ugl.notes',
+            'ugl.progress',
+            'ugl.progress_hours',
+            'ugl.created_at',
+            'ugl.updated_at'
+          )
+          .orderBy('ugl.created_at', 'desc');
+      };
+      let collection;
+      try {
+        collection = await collectionQuery(true);
+      } catch (error) {
+        if (error && error.code !== '42P01') throw error; // 42P01: undefined_table
+        collection = await collectionQuery(false);
+      }
 
       const lists = await db('custom_lists')
         .where({ user_id: req.userId })
