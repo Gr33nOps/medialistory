@@ -12,7 +12,7 @@
  * when a single title is opened, which is what keeps these quotas survivable.
  */
 
-const express = require('express');
+const { Router } = require('./http/router');
 const { lookup, fetchJson, sourceEnabled } = require('./externalApi');
 
 /* Deliberately not clampInt: that clamps into range, so an id of 0 would come
@@ -41,7 +41,7 @@ const ANIMETHEMES = 'https://api.animethemes.moe';
 const TVMAZE = 'https://api.tvmaze.com';
 
 module.exports = (verifyToken, checkBanned, deps = {}) => {
-  const router = express.Router();
+  const router = Router();
   const ids = deps.externalIds || {};
 
   // ---- games: current best price ------------------------------------------

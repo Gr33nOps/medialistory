@@ -1,10 +1,10 @@
-const express = require('express');
+const { Router } = require('./http/router');
 const taste = require('./taste');
 const avatars = require('./avatars');
 const { clientError } = require('./errors');
 
 module.exports = (db, verifyToken, checkBanned) => {
-  const router = express.Router();
+  const router = Router();
 
   // req is needed to build absolute avatar URLs; see avatars.js for why the data
   // URI is no longer inlined into any of these list responses.

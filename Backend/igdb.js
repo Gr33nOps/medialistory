@@ -1,7 +1,7 @@
-const express = require('express');
-const fetch = require('node-fetch');
+const { Router } = require('./http/router');
 const crypto = require('crypto');
 const { createTtlCache } = require('./cache');
+const { background } = require('./runtime');
 const {
   sanitizeToken,
   clampInt,
@@ -86,9 +86,15 @@ function dbRowToIgdbShape(row) {
   };
 }
 
-module.exports = (verifyToken, checkBanned, db) => {
-  const router = express.Router();
+/* options:
+     tokenStore  - { get(), set({ token, expiresAt }) }, both async. Shares the
+                   Twitch app token between Worker isolates so each new isolate
+                   does not mint its own. Omitted on Node (one process).
+     warmCatalog - start the in-process cache warmer (Node only; see below). */
+module.exports = (verifyToken, checkBanned, db, options = {}) => {
+  const router = Router();
   const cache = createTtlCache();
+  const tokenStore = options.tokenStore || null;
 
   let cachedToken = (process.env.IGDB_ACCESS_TOKEN || '').trim();
   let tokenExpiresAt = cachedToken ? Date.now() + 6 * 60 * 60 * 1000 : 0;
@@ -113,13 +119,24 @@ module.exports = (verifyToken, checkBanned, db) => {
     return (process.env.IGDB_CLIENT_SECRET || '').trim();
   }
 
-  async function getAccessToken() {
+  async function getAccessToken({ skipShared = false } = {}) {
     const clientId = getClientId();
     const clientSecret = getClientSecret();
     const now = Date.now();
 
     if (cachedToken && now < tokenExpiresAt - 60_000) {
       return cachedToken;
+    }
+
+    // Another isolate may already hold a live token. A failure to read the
+    // store only costs a fresh mint, so it never fails the request.
+    if (tokenStore && !skipShared) {
+      const shared = await tokenStore.get().catch(() => null);
+      if (shared && shared.token && now < Number(shared.expiresAt) - 60_000) {
+        cachedToken = shared.token;
+        tokenExpiresAt = Number(shared.expiresAt);
+        return cachedToken;
+      }
     }
 
     if (clientId && clientSecret) {
@@ -148,6 +165,10 @@ module.exports = (verifyToken, checkBanned, db) => {
       cachedToken = tokenData.access_token;
       tokenExpiresAt = now + (Number(tokenData.expires_in) || 5000) * 1000;
       process.env.IGDB_ACCESS_TOKEN = cachedToken;
+      if (tokenStore) {
+        await tokenStore.set({ token: cachedToken, expiresAt: tokenExpiresAt })
+          .catch((err) => console.warn('[IGDB] could not share token:', err.message));
+      }
       return cachedToken;
     }
 
@@ -198,7 +219,8 @@ module.exports = (verifyToken, checkBanned, db) => {
       cachedToken = '';
       tokenExpiresAt = 0;
       delete process.env.IGDB_ACCESS_TOKEN; // stop re-seeding the stale token
-      accessToken = await getAccessToken();
+      // The shared copy is the one that was just rejected, so mint past it.
+      accessToken = await getAccessToken({ skipShared: true });
       if (accessToken) {
         await respectRateLimit();
         res = await igdbRequest(path, clientId, accessToken, body);
@@ -613,7 +635,7 @@ module.exports = (verifyToken, checkBanned, db) => {
         const popular = await fetchPopularGames(body).catch(() => null);
         if (popular && popular.length) {
           cache.set(cacheKey, popular, TTL.list);
-          persistGames(popular).catch(() => {});
+          background(persistGames(popular));
           res.setHeader('X-Cache', 'MISS');
           return res.json(popular);
         }
@@ -673,7 +695,7 @@ module.exports = (verifyToken, checkBanned, db) => {
 
       cache.set(cacheKey, data, detailId ? TTL.detail : TTL.list);
       // Fire-and-forget write-through
-      persistGames(data).catch(() => {});
+      background(persistGames(data));
 
       res.setHeader('X-Cache', 'MISS');
       res.json(data);
@@ -795,7 +817,7 @@ module.exports = (verifyToken, checkBanned, db) => {
         if (response.ok) {
           const data = await response.json();
           cache.set(popularKey, data, TTL.list);
-          persistGames(data).catch(() => {});
+          background(persistGames(data));
         }
       }
     } catch (err) {
@@ -805,7 +827,9 @@ module.exports = (verifyToken, checkBanned, db) => {
     }
   }
 
-  if (!global.__mglCatalogWarmStarted) {
+  // Node only. On Workers there is no long-lived process for this to warm:
+  // the caches live in one isolate's memory, so the Worker passes false.
+  if (options.warmCatalog !== false && !global.__mglCatalogWarmStarted) {
     global.__mglCatalogWarmStarted = true;
     const warmMs = clampInt(process.env.CATALOG_WARM_MS, 60_000, 24 * 60 * 60 * 1000, 30 * 60 * 1000);
     setTimeout(warmCatalogCaches, 15_000);

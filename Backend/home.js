@@ -1,4 +1,4 @@
-const express = require('express');
+const { Router } = require('./http/router');
 const { clientError } = require('./errors');
 const { isValidMediaType } = require('./tmdbUtils');
 
@@ -24,7 +24,7 @@ function toNamed(list) {
 }
 
 module.exports = (db) => {
-  const router = express.Router();
+  const router = Router();
 
   router.get('/games', async (req, res) => {
     try {

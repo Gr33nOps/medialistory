@@ -1,7 +1,7 @@
-const express = require('express');
-const fetch = require('node-fetch');
+const { Router } = require('./http/router');
 const crypto = require('crypto');
 const { createTtlCache } = require('./cache');
+const { background } = require('./runtime');
 const { sanitizeToken, clampInt, rankSearchResults } = require('./igdbUtils');
 const {
   tmdbEndpointFor,
@@ -52,7 +52,7 @@ function isJapaneseAnimation(item) {
 }
 
 module.exports = (verifyToken, checkBanned, db) => {
-  const router = express.Router();
+  const router = Router();
   const cache = createTtlCache();
 
   let lastAPICall = 0;
@@ -459,7 +459,7 @@ module.exports = (verifyToken, checkBanned, db) => {
             }
             const payload = normalized ? [normalized] : [];
             cache.set(cacheKey, payload, TTL.detail);
-            persistMedia(payload).catch(() => {});
+            background(persistMedia(payload));
             res.setHeader('X-Cache', 'MISS');
             return res.json(payload);
           }
@@ -515,7 +515,7 @@ module.exports = (verifyToken, checkBanned, db) => {
       if (search) normalized = rankSearchResults(normalized, search, (m) => m && m.name);
 
       cache.set(cacheKey, normalized, TTL.list);
-      persistMedia(normalized).catch(() => {});
+      background(persistMedia(normalized));
       res.setHeader('X-Cache', 'MISS');
       return res.json(normalized);
     } catch (error) {

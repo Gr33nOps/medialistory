@@ -15,12 +15,11 @@
  *     every single view.
  */
 
-const fetch = require('node-fetch');
 const { createTtlCache } = require('./cache');
+const { requestLocal } = require('./runtime');
 
 // One cache for every source. Keys are namespaced by caller (e.g. "mal:1").
 const cache = createTtlCache();
-const inflight = new Map();
 
 // Misses are cheap to re-check but not free; a shorter TTL keeps a title that
 // genuinely has no deal/theme/episode from hammering the source all day.
@@ -33,8 +32,12 @@ const USER_AGENT = 'MediaListory/1.0 (+https://medialistory.vercel.app)';
 /**
  * Run `fn` once per key even when called concurrently. Callers that arrive
  * while a call is in flight await the same promise.
+ *
+ * On Node the in-flight map is process-wide. On Workers it is per request:
+ * a request may not await I/O another request started.
  */
 function singleFlight(key, fn) {
+  const inflight = requestLocal('externalApi.inflight', () => new Map());
   const pending = inflight.get(key);
   if (pending) return pending;
 
@@ -75,21 +78,20 @@ function lookup(key, ttlMs, fn) {
  * Per-host request spacing. The core proxies each keep their own `lastAPICall`
  * timestamp; this is the same idea, but keyed by host so one slow source cannot
  * delay another, and queued so bursts are spaced rather than dropped.
+ *
+ * Each call reserves the next free slot and sleeps until it arrives. Only a
+ * timestamp is shared between callers, never a promise, so it is safe across
+ * Worker requests.
  */
 function createLimiter(minIntervalMs) {
-  let tail = Promise.resolve();
-  let last = 0;
+  let nextSlot = 0;
 
-  return function schedule(fn) {
-    const run = tail.then(async () => {
-      const wait = last + minIntervalMs - Date.now();
-      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-      last = Date.now();
-      return fn();
-    });
-    // Keep the chain alive even when a call rejects.
-    tail = run.then(() => {}, () => {});
-    return run;
+  return async function schedule(fn) {
+    const now = Date.now();
+    const slot = Math.max(now, nextSlot);
+    nextSlot = slot + minIntervalMs;
+    if (slot > now) await new Promise((r) => setTimeout(r, slot - now));
+    return fn();
   };
 }
 

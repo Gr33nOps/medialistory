@@ -1,4 +1,4 @@
-const express = require('express');
+const { Router } = require('./http/router');
 const taste = require('./taste');
 const { clientError } = require('./errors');
 const { parseIgdbClientId, slugify } = require('./igdbUtils');
@@ -6,7 +6,7 @@ const { parseMediaRef, externalRef, isValidMediaType, providerFor } = require('.
 const { syncOverall, ensureSeasons, seedOwnSeasonFromTitle } = require('./seasons');
 
 module.exports = (db, verifyToken, checkBanned, deps = {}) => {
-  const router = express.Router();
+  const router = Router();
 
   // Adding, rating, or removing a title changes what Similar Taste is computed
   // from, so drop this user's cached scores once the write has actually

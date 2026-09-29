@@ -1,11 +1,11 @@
-const express = require('express');
+const { Router } = require('./http/router');
 const neonAuth = require('./neonAuth');
 const taste = require('./taste');
 const avatars = require('./avatars');
 const { clientError } = require('./errors');
 
 module.exports = (db, verifyToken, checkBanned) => {
-  const router = express.Router();
+  const router = Router();
 
   // Selected in place of avatar_url so the data URI never leaves Postgres.
   const USER_FIELDS = ['id', 'email', 'username', 'display_name', 'bio', 'accent',

@@ -21,7 +21,7 @@
    Refs are namespaced the same way media refs are: tmdb_person_<id>,
    kitsu_char_<id>, igdb_company_<id>. */
 
-const express = require('express');
+const { Router } = require('./http/router');
 const { createTtlCache } = require('./cache');
 const { clientError } = require('./errors');
 const { tmdbImage } = require('./tmdbUtils');
@@ -283,7 +283,7 @@ async function searchPeople(query) {
 }
 
 module.exports = (verifyToken, checkBanned, deps = {}) => {
-  const router = express.Router();
+  const router = Router();
   const cache = createTtlCache();
 
   router.use(verifyToken, checkBanned);

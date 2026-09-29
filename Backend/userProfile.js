@@ -1,10 +1,10 @@
-const express = require('express');
+const { Router } = require('./http/router');
 const taste = require('./taste');
 const avatars = require('./avatars');
 const { clientError } = require('./errors');
 
 module.exports = (db, verifyToken, checkBanned) => {
-  const router = express.Router();
+  const router = Router();
 
   const CURRENT_LIMIT = 6;
 
