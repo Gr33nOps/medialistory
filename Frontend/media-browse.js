@@ -77,9 +77,10 @@
   }
 
   (async function boot() {
-    if (typeof ensureSession === 'function') { try { await ensureSession(); } catch (_) {} }
+    var restored = null;
+    if (typeof ensureSession === 'function') { try { restored = await ensureSession(); } catch (_) {} }
     // Guest mode: browse movies/series without an account. Saving prompts sign-in.
-    if (!guest()) {
+    if (!guest() && !(restored && restored.user)) {
       try {
         var res = await apiFetch('/auth/me', { cache: 'no-store' });
         if (res.status === 401 || res.status === 403) { logout(); return; }
@@ -172,7 +173,8 @@
       var r = await apiFetch(CFG.genres, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(CFG.genresBody)
+        body: JSON.stringify(CFG.genresBody),
+        mglCacheMs: 10 * 60 * 1000
       });
       if (!r.ok) return;
       var genres = await r.json();
@@ -238,7 +240,8 @@
       var r = await apiFetch('/people/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: term })
+        body: JSON.stringify({ query: term }),
+        mglCacheMs: 2 * 60 * 1000
       });
       if (!r.ok) { host.hidden = true; host.innerHTML = ''; return; }
       var people = await r.json();
@@ -299,7 +302,8 @@
       var r = await apiFetch(ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        mglCacheMs: 2 * 60 * 1000
       });
 
       if (pendingQuery) return;
@@ -443,7 +447,8 @@
       apiFetch('/tmdb/languages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: '{}'
+        body: '{}',
+        mglCacheMs: 10 * 60 * 1000
       }).then(function (r) { return r.ok ? r.json() : []; }).then(function (langs) {
         if (!Array.isArray(langs) || !langs.length) return;
         var opts = '<option value="">Any language</option>';

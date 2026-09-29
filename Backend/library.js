@@ -227,7 +227,7 @@ module.exports = (db, verifyToken, checkBanned, deps = {}) => {
 
   router.post('/games', verifyToken, checkBanned, async (req, res) => {
     try {
-      const { game_id, game_data, status, score, notes } = req.body;
+      const { game_id, game_data, status, score, notes, progress, progress_hours } = req.body;
       let dbGameId;
 
       if (game_data) {
@@ -253,12 +253,16 @@ module.exports = (db, verifyToken, checkBanned, deps = {}) => {
         });
       }
 
+      const episodeProgress = progress == null ? null : Math.max(0, parseInt(progress, 10) || 0);
+      const hourProgress = progress_hours == null ? null : Math.max(0, Number(progress_hours) || 0);
       await db('user_game_lists').insert({
         user_id: req.userId,
         game_id: dbGameId,
         status:  status || 'plan_to_play',
         score:   score  || null,
-        notes:   cleanNote(notes)
+        notes:   cleanNote(notes),
+        progress: episodeProgress,
+        progress_hours: hourProgress
       });
 
       cacheSeasonsInBackground(dbGameId);
@@ -715,6 +719,10 @@ module.exports = (db, verifyToken, checkBanned, deps = {}) => {
 
       let collectionQ = db('user_game_lists as ugl')
         .join('games', 'ugl.game_id', 'games.id')
+        .leftJoin('media_external_ids as export_ids', function () {
+          this.on('export_ids.media_ref', '=', 'games.game_id')
+            .andOn(db.raw("export_ids.source = 'mal'"));
+        })
         .where('ugl.user_id', req.userId);
       if (cat) collectionQ = collectionQ.where('games.media_type', cat);
       const collection = await collectionQ
@@ -724,9 +732,16 @@ module.exports = (db, verifyToken, checkBanned, deps = {}) => {
           'games.tmdb_id',
           'games.media_type',
           'games.name',
+          'games.provider',
+          'games.provider_id',
+          'games.released',
+          'games.episode_count',
+          'export_ids.external_id as mal_id',
           'ugl.status',
           'ugl.score',
           'ugl.notes',
+          'ugl.progress',
+          'ugl.progress_hours',
           'ugl.created_at',
           'ugl.updated_at'
         )

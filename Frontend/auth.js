@@ -35,12 +35,16 @@ function setOAuthSectionVisible(visible) {
     if (section) section.style.display = visible ? '' : 'none';
 }
 
-function showOAuthWorking() {
+function showOAuthWorking(message) {
     hideAllViews();
     setOAuthSectionVisible(false);
     document.getElementById('authTabs').style.display = 'none';
     var status = document.getElementById('oauthStatus');
-    if (status) status.classList.remove('hidden');
+    if (status) {
+        var messageEl = status.querySelector('[data-oauth-status-message]');
+        if (messageEl && message) messageEl.textContent = message;
+        status.classList.remove('hidden');
+    }
 }
 
 function showOAuthError(message) {
@@ -80,7 +84,17 @@ async function startOAuth(provider) {
     var nextParam = new URLSearchParams(window.location.search).get('next');
     if (nextParam) sessionStorage.setItem('oauthNext', nextParam);
     else sessionStorage.removeItem('oauthNext');
-    // Same-origin OAuth: hand off to our own server, which owns the provider callback.
+    showOAuthWorking('Preparing secure sign-in…');
+    var ready = true;
+    if (typeof warmBackendForNavigation === 'function') {
+        ready = await warmBackendForNavigation(75000);
+    }
+    if (!ready) {
+        showOAuthError('We could not reach the sign-in server. Please try again.');
+        return;
+    }
+    // The API owns the provider callback. It is awake now, so the next screen
+    // will be Google/GitHub rather than Render's cold-start interstitial.
     window.location.href = API_BASE + '/auth/oauth/' + encodeURIComponent(provider) + '/start?remember=' + rememberVal;
 }
 

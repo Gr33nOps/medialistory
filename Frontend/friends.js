@@ -4,13 +4,15 @@ let authToken   = localStorage.getItem('authToken');
 let currentUser = (typeof getStoredUser === 'function') ? getStoredUser() : null;
 
 (async function bootFriends() {
-    if (typeof ensureSession === 'function') { try { await ensureSession(); } catch (_) {} }
+    var restored = null;
+    if (typeof ensureSession === 'function') { try { restored = await ensureSession(); } catch (_) {} }
     authToken = localStorage.getItem('authToken');
     currentUser = (typeof getStoredUser === 'function') ? getStoredUser() : null;
     if (!authToken) {
         window.location.href = (typeof authUrlWithNext === 'function' ? authUrlWithNext() : 'auth.html');
         return;
     }
+    if (restored && restored.user) { currentUser = restored.user; initPage(); return; }
     verifyToken();
 })();
 

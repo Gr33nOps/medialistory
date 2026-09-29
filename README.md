@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Gr33nOps/medialistory/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Gr33nOps/medialistory/ci.yml?branch=main&style=flat-square&label=CI" alt="CI status"></a>
+  <a href="https://github.com/Gr33nOps/medialistory-code/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Gr33nOps/medialistory-code/ci.yml?branch=main&style=flat-square&label=CI" alt="CI status"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT license"></a>
   <a href="package.json"><img src="https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node 18 or newer"></a>
   <a href="package.json"><img src="https://img.shields.io/badge/build-none-informational?style=flat-square" alt="No build step"></a>
@@ -105,7 +105,7 @@ Tracking (`user_game_lists`, including `progress` for episodes watched) and cust
 Node.js 18 or newer, 20 LTS recommended.
 
 ```bash
-git clone https://github.com/Gr33nOps/medialistory.git
+git clone https://github.com/Gr33nOps/medialistory-code.git
 cd medialistory
 cp .env.example .env
 npm install
