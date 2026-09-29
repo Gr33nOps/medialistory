@@ -234,7 +234,7 @@ async function findCandidates(db, userId, limit = 40) {
 /* ── Cache ───────────────────────────────────────────────────────────────── */
 /* The similar-people list is a shortlist plus scoring over it, which is far too
    much to redo on every profile view. It only moves when someone rates or ranks
-   something, so a short TTL is plenty. In-process is deliberate: one Render
+   something, so a short TTL is plenty. In-process is deliberate: one API
    instance, and a stale entry costs nothing worse than a slightly old ordering. */
 
 const TTL_MS = 10 * 60 * 1000;

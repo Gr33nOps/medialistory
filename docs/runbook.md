@@ -30,7 +30,6 @@ App buttons ask Neon Auth for the provider URL (`POST {NEON_AUTH_BASE_URL}/sign-
 
 1. **Trusted domains** (CSRF): add every app origin, or Neon Auth rejects the calls.
    - `neon neon-auth domain add https://my-game-list-live.vercel.app`
-   - `neon neon-auth domain add https://medialistory.onrender.com`
    - `neon neon-auth domain allow-localhost enable` (local dev)
 2. **Enable Google:** Neon Console → Auth → providers (a shared dev key is on by default and shows Neon branding; add your own Google OAuth client for production).
 3. **Enable Discord:** add it via `neon neon-auth oauth-provider` / the Console with a Discord app's client id + secret (not enabled by default).
@@ -50,10 +49,10 @@ Neon Auth (Better Auth) treats each provider identity separately unless linked. 
 
 ### Production deploy checklist
 
-1. Host Node (`npm start`) behind HTTPS; set `NODE_ENV=production`. For **Render API + Vercel Frontend**, see [Split deploy](#split-deploy-render-api--vercel-frontend) below.
-2. Add production origins as Neon Auth trusted domains (`neon neon-auth domain add https://my-game-list-live.vercel.app` and the Render origin).
+1. Deploy the API Worker (`npm run deploy:production`) and the frontend (Vercel). See [Deploy](#deploy-cloudflare-workers-api--vercel-frontend) below.
+2. Add the frontend origin as a Neon Auth trusted domain (`neon neon-auth domain add https://medialistory.vercel.app`). The API sends that origin on its server-side Neon Auth calls, so the Worker host itself does not need to be listed.
 3. Enable the Google (and optionally Discord) OAuth provider in the Neon Console with your own OAuth client for production (the default shared key shows Neon branding).
-4. Multi-instance: set `REDIS_URL` so rate limits are shared (in-memory store is single-process only).
+4. Rate limits need no setup: auth limits live in the `StateStore` Durable Object, catalog limits in the Rate Limiting binding.
 5. Smoke: `/health`, `/ready`, register/login, add game, follow.
 
 ## Environment / secret rotation
@@ -100,52 +99,15 @@ Authenticated users can download their data:
 
 1. Check `/health` and `/ready`.
 2. Check Neon project status + Twitch/IGDB + TMDB status.
-3. Tail host logs (morgan `combined` in production).
-4. Confirm rate-limit store (`memory` vs Redis) if multi-instance.
+3. Tail the Worker: `npx wrangler tail` (or Workers Logs in the Cloudflare dashboard). Request logs show paths only.
+4. Check the Hyperdrive config and the Neon compute (Neon suspends idle computes; the first query after that is slower, not failing).
 5. If auth mass-fails after deploy, verify `JWT_SECRET` was not changed unintentionally.
 
-## Split deploy: Render (API) + Vercel (Frontend)
+## Deploy: Cloudflare Workers (API) + Vercel (Frontend)
 
-Free-tier layout: **Express API on Render**, **static `Frontend/` on Vercel**. Vercel rewrites `/api/*` (and `/health`, `/ready`) to Render so the SPA can keep `API_BASE = '/api'` (same-origin from the browser). See root [`vercel.json`](../vercel.json).
+- **API:** the `medialistory-api` Worker at `https://medialistory-api.gr33nops.workers.dev`. Config in [`wrangler.jsonc`](../wrangler.jsonc); secrets via `wrangler secret`. Full setup, the env-var mapping and local development are in [`cloudflare-workers.md`](cloudflare-workers.md).
+- **Staging:** `medialistory-api-staging` on the Neon branch `cf-worker-staging` (`npm run deploy:staging`). Verify with `test/deployed/worker-smoke.mjs` before production.
+- **Frontend:** static `Frontend/` on Vercel per [`vercel.json`](../vercel.json). The API origin is `API_ORIGIN` in [`Frontend/common.js`](../Frontend/common.js) and must also be in the CSP `connect-src`.
+- **Order:** deploy the Worker first, check `/ready` and the smoke test, then deploy the frontend.
 
-### Deploy order
-
-1. **Render (API first)**  
-   - New **Web Service** from this GitHub repo  
-   - Root directory: repo root (`.`)  
-   - Build: `npm install` (default)  
-   - Start: `npm start`  
-   - Env vars from [`.env.example`](../.env.example): `JWT_SECRET`, `DATABASE_URL`, `NEON_AUTH_BASE_URL`, `NEON_AUTH_JWKS_URL`, `IGDB_*`, `TMDB_*`, `NODE_ENV=production`  
-   - Use the Neon **pooled** `DATABASE_URL` (`...-pooler...neon.tech/neondb?sslmode=require&channel_binding=require`) from the Neon Console → Connect. Keep `DB_SSL_INSECURE=0` (Neon presents a valid cert).  
-   - Set `FRONTEND_URL` after Vercel exists (step 3), e.g. `https://your-app.vercel.app`  
-   - Note the service URL: `https://YOUR-RENDER-SERVICE.onrender.com`
-
-2. **Wire Vercel → Render**  
-   - In [`vercel.json`](../vercel.json), replace every `YOUR-RENDER-SERVICE.onrender.com` with your real Render hostname  
-   - Commit and push (or edit in the Vercel UI if you prefer)
-
-3. **Vercel (Frontend)**  
-   - Import the same repo → Framework **Other** → Root Directory = project root  
-   - No build command required; `vercel.json` serves `/Frontend/*` and proxies `/api`  
-   - Deploy → note `https://your-app.vercel.app`  
-   - On Render, set `FRONTEND_URL=https://your-app.vercel.app` and restart
-
-4. **Neon Auth trusted domains**  
-   - `neon neon-auth domain add https://your-app.vercel.app`  
-   - `neon neon-auth domain add https://YOUR-RENDER-SERVICE.onrender.com`  
-   - Enable Google/Discord providers in the Neon Console
-
-### Optional: call Render directly (no rewrite)
-
-Set before `common.js` loads:
-
-```html
-<script>window.MGL_API_BASE = 'https://YOUR-RENDER-SERVICE.onrender.com/api';</script>
-```
-
-Then ensure Render `FRONTEND_URL` matches the Vercel origin (CORS + `credentials: 'include'`). Prefer the rewrite path for simpler cookies.
-
-### Free-tier caveats
-
-- Render sleeps when idle → first `/api` call after wake is slow (Vercel HTML still loads fast).  
-- For the simplest demo, hosting **everything on Render** (Express already serves `Frontend/`) avoids two dashboards.
+Workers do not sleep, so there is no cold start to wait out and no keep-alive job.

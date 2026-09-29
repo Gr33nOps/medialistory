@@ -13,10 +13,9 @@
    each category kept side by side rather than blended. */
 (function () {
   var API = (typeof API_BASE === 'string' && API_BASE) ? API_BASE : '/api';
-  // Every data call goes through apiFetch so it is counted by the cold-start
-  // watchdog in common.js. A raw fetch here is invisible to it, which leaves the
-  // trending skeletons sitting there with no "Starting the server" notice while
-  // Render boots. Falls back to plain fetch only if common.js somehow missed.
+  // Every data call goes through apiFetch so it drives the top progress bar
+  // and carries the session. Falls back to plain fetch only if common.js
+  // somehow missed.
   var api = (typeof apiFetch === 'function')
     ? apiFetch
     : function (path, opts) { return fetch(API + path, opts); };

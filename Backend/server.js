@@ -11,7 +11,9 @@ const { clientError, IS_PROD } = require('./errors');
 const { createRedisStore } = require('./rateLimitStore');
 const { buildApiRoutes } = require('./routes');
 
-// Do not override platform env (Render/Vercel). Local `.env` only fills gaps.
+// Legacy Node/Express entry point, kept for rollback. The production API runs
+// on Cloudflare Workers (worker/index.js) with the same route modules.
+// Do not override platform env. Local `.env` only fills gaps.
 require('dotenv').config({
   path: path.resolve(__dirname, '..', '.env'),
   override: false
@@ -55,19 +57,10 @@ function parseDatabaseTarget(url) {
 const dbTarget = parseDatabaseTarget(process.env.DATABASE_URL);
 if (dbTarget) {
   console.log(`Database target: ${dbTarget.user}@${dbTarget.host}:${dbTarget.port}`);
-  const isDirectSupabase = /^db\.[a-z0-9]+\.supabase\.co$/i.test(dbTarget.host);
-  if (isDirectSupabase && (process.env.RENDER === 'true' || process.env.NODE_ENV === 'production')) {
-    console.error('\nDATABASE_URL still uses the direct Supabase host (IPv6).');
-    console.error('Render is IPv4-only - use the Session pooler URL instead:');
-    console.error('  Supabase → Connect → Connection pooling → Session mode');
-    console.error('  Host must contain: pooler.supabase.com');
-    console.error('  User must look like: postgres.<project-ref>\n');
-    process.exit(1);
-  }
 }
 
 const app = express();
-// Render terminates TLS in front of the app. Without this, req.protocol reports
+// A hosting proxy terminates TLS in front of the app. Without this, req.protocol reports
 // http, and the absolute avatar URLs built from it would be blocked as mixed
 // content on the https frontend.
 app.set('trust proxy', 1);
@@ -198,11 +191,6 @@ db.raw('SELECT 1')
     console.error('Database connection failed:', err.message);
     if (dbTarget) {
       console.error(`Tried: ${dbTarget.user}@${dbTarget.host}:${dbTarget.port}`);
-    }
-    if (/ENETUNREACH|EHOSTUNREACH/i.test(err.message || '')) {
-      console.error('Hint: ENETUNREACH on Render usually means DATABASE_URL is still db.*.supabase.co (IPv6).');
-      console.error('Switch to Session pooler from Supabase Connect (host may be aws-0 / aws-1 / …).');
-      console.error('Wrong pooler cluster → tenant/user not found.');
     }
     if (ALLOW_DEGRADED) {
       console.warn('ALLOW_DEGRADED=1 - continuing without DB (auth/lists will fail).');

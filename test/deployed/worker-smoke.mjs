@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* End-to-end smoke test for a deployed API (staging Worker, production Worker
-   or the old Render service - they must behave the same).
+   or the legacy Node server - they must behave the same).
 
    It signs in as an existing account through a session token, walks through
    every area the frontend uses (session, library, tracking, seasons, custom

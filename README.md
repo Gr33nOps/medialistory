@@ -90,9 +90,9 @@ MediaListory uses these APIs but is not endorsed or certified by any of them. Ev
 
 ## Stack
 
-A plain HTML, CSS, and JavaScript frontend on a Node and Express API, with **Neon Postgres** behind it. No build step and no frontend framework. Email and password identity comes from Neon Auth; Google and GitHub sign-in runs as a direct OAuth2 code exchange on the API.
+A plain HTML, CSS, and JavaScript frontend on an API that runs on **Cloudflare Workers**, with **Neon Postgres** behind it through Hyperdrive. No build step and no frontend framework. Email and password identity comes from Neon Auth; Google and GitHub sign-in runs as a direct OAuth2 code exchange on the API.
 
-The deploy is split. The static frontend runs on **Vercel** and calls the API on **Render** cross origin, and Render can also serve the frontend itself as a same origin fallback. The app mints its own session JWT in an httpOnly cookie, and because the API performs the OAuth2 exchange itself, sessions survive that split.
+The deploy is split. The static frontend runs on **Vercel** and calls the API Worker cross origin. The app mints its own session JWT, stored by the frontend and sent as a Bearer token, and because the API performs the OAuth2 exchange itself, sessions survive that split. The route handlers in `Backend/` are plain modules shared by the Worker (`worker/`) and a legacy Node server (`npm start`).
 
 ### Media model
 
@@ -107,36 +107,38 @@ Node.js 18 or newer, 20 LTS recommended.
 ```bash
 git clone https://github.com/Gr33nOps/medialistory-code.git
 cd medialistory
-cp .env.example .env
+cp .dev.vars.example .dev.vars
 npm install
 ```
 
-1. Fill `.env` from [`.env.example`](.env.example): Neon `DATABASE_URL`, Neon Auth, JWT, Twitch/IGDB, and TMDB. Kitsu needs no key, and Google/GitHub OAuth is optional. The database string comes from the Neon Console under Connect, and the auth values from `neon neon-auth status --project-id <id> --branch production`.
+1. Fill `.dev.vars` from [`.dev.vars.example`](.dev.vars.example): Neon Auth, JWT, Twitch/IGDB, and TMDB, and point `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` at a Neon **branch** (see [`docs/cloudflare-workers.md`](docs/cloudflare-workers.md)). Kitsu needs no key, and Google/GitHub OAuth is optional. The database string comes from the Neon Console under Connect, and the auth values from `neon neon-auth status --project-id <id> --branch production`.
 2. Apply the schema to Neon: [`DB/schema.postgres.sql`](DB/schema.postgres.sql), then the migrations in [`DB/migrations/`](DB/migrations/) in order, through `neon psql` or the Neon SQL editor. See [`DB/README.md`](DB/README.md). `add-external-id-map.sql` is worth applying even though nothing breaks without it: the detail-page extras fall back to resolving their ids live on every view, which is slower and spends more of the upstream budget.
 3. Start it:
 
 ```bash
-npm start
+npm run dev:worker
 ```
 
-Then open [localhost:3000](http://localhost:3000).
+Then open [localhost:8787](http://localhost:8787). The Worker serves the API and, in local development only, the `Frontend/` folder.
 
 | Command | What it does |
 |---------|--------------|
-| `npm start` | Run the server |
-| `npm run dev` | Run with nodemon reload |
+| `npm run dev:worker` | Run the API Worker locally, serving `Frontend/` too |
 | `npm test` | Unit and smoke tests |
+| `npm run test:worker` | The Worker on local workerd: probes, CORS, headers, limits |
+| `npm run deploy:staging` / `deploy:production` | Deploy the Worker |
+| `npm start` | Legacy Node/Express server (same handlers), kept for rollback |
 | `npm run test:e2e` | Playwright end to end suite |
 
 Do not set `ALLOW_DEGRADED=1` in production. It lets the server boot with a broken dependency.
 
 ## Deploy
 
-**Render (API).** A web service running `npm start`, with the environment from `.env.example`. Use the Neon **pooled** `DATABASE_URL` (`...-pooler...neon.tech/neondb?sslmode=require&channel_binding=require`), plus `NEON_AUTH_BASE_URL`, `NEON_AUTH_JWKS_URL`, `JWT_SECRET`, IGDB, and TMDB. For social sign-in add `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` and `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET`. Set `FRONTEND_URL=https://medialistory.vercel.app`, scheme included, so CORS and OAuth redirects point at the frontend.
+**Cloudflare Workers (API).** `medialistory-api` at `https://medialistory-api.gr33nops.workers.dev`, configured in [`wrangler.jsonc`](wrangler.jsonc): Hyperdrive to Neon (query caching off), a Durable Object for auth rate limits and OAuth hand-off codes, and a Rate Limiting binding for catalog calls. Secrets are set with `wrangler secret`. Setup, the environment-variable mapping and deploy steps are in [`docs/cloudflare-workers.md`](docs/cloudflare-workers.md).
 
 **Vercel (frontend).** A static deploy of `Frontend/` per [`vercel.json`](vercel.json), no build step. The API origin is set in [`Frontend/common.js`](Frontend/common.js) and allowed in the Vercel CSP `connect-src`.
 
-**OAuth apps.** Register the redirect URIs against the **API origin**, not the frontend: `https://medialistory.onrender.com/api/auth/oauth/google/callback` and the matching `/github/callback`. The API runs the exchange and redirects back to `FRONTEND_URL`.
+**OAuth apps.** Register the redirect URIs against the **API origin**, not the frontend: `https://medialistory-api.gr33nops.workers.dev/api/auth/oauth/google/callback` and the matching `/github/callback`. The API runs the exchange and redirects back to `FRONTEND_URL`.
 
 Health probes are `/health` for liveness and `/ready` for database and IGDB reachability. Full procedures live in [`docs/runbook.md`](docs/runbook.md).
 

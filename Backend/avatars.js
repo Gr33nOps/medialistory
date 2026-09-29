@@ -49,7 +49,7 @@ function columns(db, alias = 'users') {
 }
 
 function originOf(req) {
-  // Render terminates TLS in front of the app, so this needs `trust proxy` set
+  // Behind a TLS-terminating proxy (the legacy Node server) this needs `trust proxy` set
   // for req.protocol to be https rather than http. Without it every avatar URL
   // would be blocked as mixed content on the https frontend.
   return req.protocol + '://' + req.get('host');
@@ -130,7 +130,7 @@ function handler(db) {
         // a canvas without tainting it.
         'Access-Control-Allow-Origin': '*',
         /* The app's default is same-origin, which is right for the API but wrong
-           here: the frontend is on Vercel and this is served from Render, so a
+           here: the frontend is on Vercel and this is served from the API host, so a
            same-origin policy makes the browser refuse to render the <img> at all
            and every avatar silently falls back to the generated initials. This
            is a public profile picture meant to be embedded, so it opts out. */

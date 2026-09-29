@@ -5,8 +5,8 @@ the "Shows" label, the sign-in OAuth buttons, guest browsing, and the SEO
 assets. They run against the **deployed** site by default.
 
 `@playwright/test` is intentionally **not** in the app's `package.json` - the
-app deploys on Render with `npm install`, and we don't want Playwright's
-browser download running on every deploy. Install it on demand instead.
+app's CI and deploys run `npm install`/`npm ci`, and we don't want Playwright's
+browser download running on every one of them. Install it on demand instead.
 
 ## Run locally
 

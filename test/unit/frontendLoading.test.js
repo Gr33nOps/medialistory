@@ -6,24 +6,29 @@ const { JSDOM } = require('jsdom');
 
 const frontend = path.join(__dirname, '../../Frontend');
 
-test('a slow ordinary API request never opens the server cold-start panel', () => {
+test('the production frontend calls the Worker API and has no cold-start panel', () => {
   const dom = new JSDOM('<!doctype html><body></body>', {
     url: 'https://medialistory.vercel.app/home.html', runScripts: 'outside-only'
   });
   const w = dom.window;
   const timers = [];
-  w.localStorage.setItem('mgl:backendReadyAt', String(Date.now()));
-  w.fetch = () => new Promise(() => {});
+  const requested = [];
+  w.fetch = (url) => { requested.push(String(url)); return new Promise(() => {}); };
   w.setTimeout = (fn, ms) => { timers.push({ fn, ms }); return timers.length; };
   w.clearTimeout = () => {};
   w.MGL_SENTRY_DSN = 'disabled';
   w.eval(fs.readFileSync(path.join(frontend, 'common.js'), 'utf8'));
-  w.mountBackendWake();
+
+  assert.equal(w.API_BASE, 'https://medialistory-api.gr33nops.workers.dev/api');
+  assert.equal(typeof w.mountBackendWake, 'undefined');
+  assert.equal(typeof w.warmBackendForNavigation, 'undefined');
 
   void w.apiFetch('/tmdb/movies', { method: 'POST' });
-  timers.filter(t => t.ms >= 2500 && t.ms <= 5000).forEach(t => t.fn());
+  timers.forEach(t => t.fn());
 
+  assert.deepEqual(requested, ['https://medialistory-api.gr33nops.workers.dev/api/tmdb/movies']);
   assert.equal(w.document.getElementById('backendWake'), null);
+  assert.ok(!requested.some(u => /\/health$/.test(u)), 'no health polling');
   dom.window.close();
 });
 
@@ -84,27 +89,23 @@ test('catalog requests reuse a short-lived response when callers opt into cachin
   dom.window.close();
 });
 
-test('social sign-in keeps the branded auth view visible while the backend wakes', async () => {
+test('social sign-in goes straight to the provider, naming it, without waiting on the API', async () => {
   const dom = new JSDOM(fs.readFileSync(path.join(frontend, 'auth.html'), 'utf8'), {
     url: 'https://medialistory.vercel.app/auth.html', runScripts: 'outside-only'
   });
   const w = dom.window;
-  let releaseBackend;
-  let settled = false;
-  w.API_BASE = 'https://medialistory.onrender.com/api';
-  w.warmBackendForNavigation = () => new Promise(resolve => { releaseBackend = resolve; });
+  const fetches = [];
+  w.fetch = (url) => { fetches.push(String(url)); return new Promise(() => {}); };
+  w.API_BASE = 'https://medialistory-api.gr33nops.workers.dev/api';
   w.eval(fs.readFileSync(path.join(frontend, 'auth.js'), 'utf8'));
 
-  const signIn = w.startOAuth('google').then(() => { settled = true; });
-  await Promise.resolve();
+  await w.startOAuth('github');
 
-  assert.equal(settled, false, 'OAuth navigation must wait for the API to wake');
-  assert.equal(w.document.getElementById('oauthStatus').classList.contains('hidden'), false);
-  assert.match(w.document.getElementById('oauthStatus').textContent, /preparing secure sign-in/i);
-
-  releaseBackend(false);
-  await signIn;
-  assert.match(w.document.getElementById('oauthError').textContent, /could not reach/i);
+  const status = w.document.getElementById('oauthStatus');
+  assert.equal(status.classList.contains('hidden'), false);
+  assert.match(status.textContent, /taking you to GitHub/i);
+  assert.equal(w.document.getElementById('oauthError').textContent, '');
+  assert.ok(!fetches.some(u => /\/health$/.test(u)), 'no wake-up probe before navigating');
   dom.window.close();
 });
 

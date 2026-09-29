@@ -14,7 +14,7 @@ module.exports = defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : [['list']],
   use: {
-    baseURL: process.env.BASE_URL || 'https://medialistory.onrender.com',
+    baseURL: process.env.BASE_URL || 'https://medialistory.vercel.app',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },

@@ -149,7 +149,7 @@ module.exports = (db, jwt, JWT_SECRET, verifyToken, checkBanned, options = {}) =
   }
 
   // Where to send the browser once auth finishes - the app front end. On the
-  // split deploy this is the Vercel site (FRONTEND_URL); locally / on the Render
+  // split deploy this is the Vercel site (FRONTEND_URL); locally / on a server
   // service self-serving the app it falls back to the request host.
   function publicOrigin(req) {
     let url = String(process.env.FRONTEND_URL || '').trim().replace(/\/$/, '');
@@ -158,7 +158,7 @@ module.exports = (db, jwt, JWT_SECRET, verifyToken, checkBanned, options = {}) =
     return url;
   }
   // Where the OAuth provider redirects back to - this must be THIS backend
-  // (Render) and must exactly match the redirect URI registered with Google /
+  // (BACKEND_URL) and must exactly match the redirect URI registered with Google /
   // GitHub. It is resolved independently of FRONTEND_URL so moving the frontend
   // to Vercel doesn't change (or require re-registering) the callback URL.
   function backendOrigin(req) {
