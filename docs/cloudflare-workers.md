@@ -121,7 +121,7 @@ The provider redirects to `<BACKEND_URL>/api/auth/oauth/<provider>/callback`.
 
 ```bash
 curl -s https://<worker-host>/ready
-BASE_URL=https://<worker-host> TOKEN=<test account session JWT> node scripts/worker-smoke.mjs
+BASE_URL=https://<worker-host> TOKEN=<test account session JWT> node test/deployed/worker-smoke.mjs
 ```
 
 The smoke script covers session, library, tracking, seasons, custom lists,

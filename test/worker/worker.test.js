@@ -6,7 +6,7 @@
    body parsing, error shapes, auth failures, both rate limiters and the
    redirect for stray browser visits - without touching Neon or any API.
    Database-backed routes are exercised against staging by
-   scripts/worker-smoke.mjs. */
+   test/deployed/worker-smoke.mjs. */
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
