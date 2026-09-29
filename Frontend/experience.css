@@ -30,7 +30,6 @@ button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation
 /* Navigation: category tabs remain concise beside profile actions. */
 .navbar { padding: 12px 18px; gap: 14px; margin-bottom: 32px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 18px; }
 .nav-brand { color: var(--text-primary); letter-spacing: -.045em; }
-.nav-brand::before { content: ''; display: inline-block; width: 9px; height: 20px; border-radius: 3px; margin-right: 10px; vertical-align: -3px; background: var(--cat-movie-light); box-shadow: 4px -4px 0 var(--cat-series-light), 8px -8px 0 var(--cat-anime-light); transform: rotate(-12deg); }
 .nav-tab { border-radius: 10px; transition: background-color .2s, color .2s; }
 .nav-menu-pop { padding: 8px; border-radius: 16px; box-shadow: var(--shadow-modal); }
 .nav-menu-item { border-radius: 9px; min-height: 44px; }
@@ -259,7 +258,6 @@ a.friend-name:hover { text-decoration: underline; text-underline-offset: 4px; }
   .cl-toast, .toast-host { bottom: calc(86px + env(safe-area-inset-bottom)); }
 }
 @media (max-width: 360px) {
-  .nav-brand::before { display: none; }
   .dash-hero { padding: 22px 16px; }
   .dash-hero-title { font-size: 1.8rem; }
   .mobile-dock a { font-size: .59rem; }
