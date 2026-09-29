@@ -142,9 +142,9 @@ async function ensureSeasons(db, game, fetchSeasons) {
 }
 
 module.exports = (db, verifyToken, checkBanned, deps = {}) => {
-  const express = require('express');
+  const { Router } = require('./http/router');
   const { clientError } = require('./errors');
-  const router = express.Router();
+  const router = Router();
 
   const STATUSES = ['playing', 'completed', 'plan_to_play', 'on_hold', 'dropped'];
 

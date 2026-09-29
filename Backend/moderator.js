@@ -1,10 +1,10 @@
-const express = require('express');
+const { Router } = require('./http/router');
 const avatars = require('./avatars');
 const { syncUserFlags } = require('./userRoles');
 const { clientError } = require('./errors');
 
 module.exports = (db, verifyToken, verifyModerator, logModeratorActivity) => {
-  const router = express.Router();
+  const router = Router();
   const supabase = null; // Identity is Neon Auth; roles/bans live in public.users.
 
   router.get('/stats', verifyToken, verifyModerator, async (req, res) => {

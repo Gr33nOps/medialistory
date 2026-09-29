@@ -6,10 +6,10 @@ const compression = require('compression');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const knex = require('knex');
-const jwt = require('jsonwebtoken');
 const path = require('path');
 const { clientError, IS_PROD } = require('./errors');
 const { createRedisStore } = require('./rateLimitStore');
+const { buildApiRoutes } = require('./routes');
 
 // Do not override platform env (Render/Vercel). Local `.env` only fills gaps.
 require('dotenv').config({
@@ -213,124 +213,6 @@ db.raw('SELECT 1')
   });
 
 const JWT_SECRET = process.env.JWT_SECRET;
-const { getTokenFromRequest } = require('./sessionCookies');
-
-const verifyToken = async (req, res, next) => {
-  const token = getTokenFromRequest(req);
-  if (!token) return res.status(401).json({ error: 'Unauthorized' });
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.userId = decoded.userId;
-    req.tokenVersion = Number(decoded.tv || 0);
-
-    try {
-      const row = await db('users').where({ id: req.userId }).first('token_version');
-      if (row && Number(row.token_version || 0) !== req.tokenVersion) {
-        return res.status(401).json({ error: 'Session expired. Please log in again.' });
-      }
-    } catch (_) {
-      // token_version column may not exist yet - allow token until migration is applied
-    }
-
-    next();
-  } catch (error) {
-    res.status(401).json({ error: 'Invalid token' });
-  }
-};
-
-// Guest-friendly auth: attach req.userId when a valid token is present, otherwise
-// continue as an anonymous visitor. Banned users are still blocked. Used for
-// read-only catalog browse so guests can explore before creating an account.
-const optionalAuth = async (req, res, next) => {
-  const token = getTokenFromRequest(req);
-  if (!token) return next();
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.userId = decoded.userId;
-    try {
-      const row = await db('users').where({ id: req.userId }).first('is_banned');
-      if (row && row.is_banned) return res.status(403).json({ error: 'Your account has been banned' });
-    } catch (_) {}
-    return next();
-  } catch (_) {
-    return next();
-  }
-};
-const passThrough = (req, res, next) => next();
-
-const checkBanned = async (req, res, next) => {
-  try {
-    const dbUser = await db('users').where({ id: req.userId }).first();
-    if (!dbUser) return res.status(401).json({ error: 'User not found' });
-
-    if (dbUser.is_banned) {
-      return res.status(403).json({
-        error: 'Your account has been banned',
-        reason: dbUser.ban_reason || null
-      });
-    }
-    next();
-  } catch (error) {
-    return clientError(res, 500, 'Server error', error);
-  }
-};
-
-const verifyModerator = async (req, res, next) => {
-  try {
-    const dbUser = await db('users').where({ id: req.userId }).first();
-    if (!dbUser) return res.status(401).json({ error: 'User not found' });
-
-    if (dbUser.is_banned) {
-      return res.status(403).json({ error: 'Your account has been banned' });
-    }
-    if (!dbUser.is_moderator && !dbUser.is_admin) {
-      return res.status(403).json({ error: 'Moderator access required' });
-    }
-
-    req.userRole = {
-      isModerator: dbUser.is_moderator || dbUser.is_admin,
-      isAdmin:     dbUser.is_admin || false
-    };
-
-    next();
-  } catch (error) {
-    return clientError(res, 500, 'Server error', error);
-  }
-};
-
-const verifyAdmin = async (req, res, next) => {
-  try {
-    const dbUser = await db('users').where({ id: req.userId }).first();
-    if (!dbUser) return res.status(401).json({ error: 'User not found' });
-
-    if (dbUser.is_banned) {
-      return res.status(403).json({ error: 'Your account has been banned' });
-    }
-    if (!dbUser.is_admin) {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
-    req.userRole = { isModerator: true, isAdmin: true };
-    next();
-  } catch (error) {
-    return clientError(res, 500, 'Server error', error);
-  }
-};
-
-async function logModeratorActivity(moderatorId, actionType, targetType, targetId, details = null) {
-  try {
-    await db('moderator_activity').insert({
-      moderator_id: moderatorId,
-      action_type:  actionType,
-      target_type:  targetType,
-      target_id:    targetId,
-      details:      details
-    });
-  } catch (error) {
-    console.error('Activity logging error:', error);
-  }
-}
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
@@ -359,174 +241,15 @@ app.get('/ready', async (req, res) => {
 console.log('Loading routes...');
 
 try {
-  const authRoutes = require('./auth');
-  app.use('/api/auth', authLimiter, authRoutes(db, jwt, JWT_SECRET, verifyToken, checkBanned));
-  console.log('  Auth routes loaded');
-} catch (error) {
-  console.error('  Error loading auth routes:', error.message);
-  process.exit(1);
-}
-
-try {
-  const homeRoutes = require('./home');
-  app.use('/api', homeRoutes(db));
-  console.log('  Home routes loaded');
-} catch (error) {
-  console.error('  Error loading home routes:', error.message);
-  process.exit(1);
-}
-
-try {
-  const profileRoutes = require('./profile');
-  app.use('/api/user', profileRoutes(db, verifyToken, checkBanned));
-  console.log('  Profile routes loaded');
-} catch (error) {
-  console.error('  Error loading profile routes:', error.message);
-  process.exit(1);
-}
-
-try {
-  const libraryRoutes = require('./library');
-  const seasonRoutes = require('./seasons');
-  const seasonSources = require('./seasonSources');
-  app.use('/api/user', libraryRoutes(db, verifyToken, checkBanned, { fetchSeasons: seasonSources.fetchSeasons }));
-  app.use('/api/user', seasonRoutes(db, verifyToken, checkBanned, { fetchSeasons: seasonSources.fetchSeasons }));
-  console.log('  Library routes loaded');
-} catch (error) {
-  console.error('  Error loading library routes:', error.message);
-  process.exit(1);
-}
-
-try {
-  const friendsRoutes = require('./friends');
-  app.use('/api', friendsRoutes(db, verifyToken, checkBanned));
-  console.log('  Friends routes loaded');
-} catch (error) {
-  console.error('  Error loading friends routes:', error.message);
-  process.exit(1);
-}
-
-try {
-  const userProfileRoutes = require('./userProfile');
-  app.use('/api/users', userProfileRoutes(db, verifyToken, checkBanned));
-  console.log('  UserProfile routes loaded');
-} catch (error) {
-  console.error('  Error loading userProfile routes:', error.message);
-  process.exit(1);
-}
-
-try {
-  const adminRoutes = require('./admin');
-  app.use('/api/admin', adminRoutes(db, verifyToken, verifyModerator, verifyAdmin, logModeratorActivity));
-  console.log('  Admin routes loaded');
-} catch (error) {
-  console.error('  Error loading admin routes:', error.message);
-  process.exit(1);
-}
-
-try {
-  const moderatorRoutes = require('./moderator');
-  app.use('/api/moderator', moderatorRoutes(db, verifyToken, verifyModerator, logModeratorActivity));
-  console.log('  Moderator routes loaded');
-} catch (error) {
-  console.error('  Error loading moderator routes:', error.message);
-  process.exit(1);
-}
-
-// Held outside the try blocks: the enrichment routes reuse these routers'
-// authenticated fetches to resolve Steam / TVmaze ids.
-let igdbRouter = null;
-let tmdbRouter = null;
-
-try {
-  const igdbRoutes = require('./igdb');
-  igdbRouter = igdbRoutes(optionalAuth, passThrough, db);
-  app.use('/api/igdb', igdbLimiter, igdbRouter);
-  console.log('  IGDB proxy routes loaded');
-
-  // Profiles for the names beside a title: TMDB people, Kitsu characters and
-  // IGDB companies, normalised to one shape so one page renders all three.
-  const peopleRoutes = require('./people');
-  app.use('/api/people', peopleRoutes(optionalAuth, passThrough, { igdbFetch: igdbRouter.igdbFetch }));
-  console.log('  People routes loaded');
-} catch (error) {
-  console.error('  Error loading IGDB proxy routes:', error.message);
-  process.exit(1);
-}
-
-try {
-  const tmdbRoutes = require('./tmdb');
-  tmdbRouter = tmdbRoutes(optionalAuth, passThrough, db);
-  app.use('/api/tmdb', igdbLimiter, tmdbRouter);
-  console.log('  TMDB proxy routes loaded');
-} catch (error) {
-  console.error('  Error loading TMDB proxy routes:', error.message);
-  process.exit(1);
-}
-
-try {
-  const kitsuRoutes = require('./kitsu');
-  app.use('/api/kitsu', igdbLimiter, kitsuRoutes(optionalAuth, passThrough, db));
-  console.log('  Kitsu (anime) proxy routes loaded');
-} catch (error) {
-  console.error('  Error loading Kitsu proxy routes:', error.message);
-  process.exit(1);
-}
-
-/* Secondary sources: game prices (CheapShark), anime score and themes
-   (MyAnimeList via Jikan, AnimeThemes), upcoming episodes (TVmaze). Strictly
-   additive - if this fails to load, every core route still works. */
-let enrichRouter = null;
-try {
-  const buildExternalIds = require('./externalIds');
-  const enrichRoutes = require('./enrich');
-  const externalIds = buildExternalIds({
+  const { mounts } = buildApiRoutes({
     db,
-    igdbFetch: igdbRouter && igdbRouter.igdbFetch,
-    tmdbFetch: tmdbRouter && tmdbRouter.tmdbFetch
+    jwtSecret: JWT_SECRET,
+    limiters: { auth: authLimiter, catalog: igdbLimiter }
   });
-  enrichRouter = enrichRoutes(optionalAuth, passThrough, { externalIds });
-  app.use('/api/enrich', igdbLimiter, enrichRouter);
-  console.log('  Enrichment routes loaded');
+  for (const [prefix, ...handlers] of mounts) app.use(prefix, ...handlers);
 } catch (error) {
-  // Deliberately not fatal: detail pages simply render without the extras.
-  console.error('  Enrichment routes unavailable:', error.message);
-}
-
-// Compatibility aliases for external clients (/api remains for this app).
-try {
-  const authRoutes = require('./auth');
-  const homeRoutes = require('./home');
-  const profileRoutes = require('./profile');
-  const libraryRoutes = require('./library');
-  const seasonRoutes = require('./seasons');
-  const seasonSources = require('./seasonSources');
-  const friendsRoutes = require('./friends');
-  const userProfileRoutes = require('./userProfile');
-  const adminRoutes = require('./admin');
-  const moderatorRoutes = require('./moderator');
-  const igdbRoutes = require('./igdb');
-  const tmdbRoutes = require('./tmdb');
-  const kitsuRoutes = require('./kitsu');
-
-  app.use('/api/v1/auth', authLimiter, authRoutes(db, jwt, JWT_SECRET, verifyToken, checkBanned));
-  app.use('/api/v1', homeRoutes(db));
-  app.use('/api/v1/user', profileRoutes(db, verifyToken, checkBanned));
-  app.use('/api/v1/user', libraryRoutes(db, verifyToken, checkBanned, { fetchSeasons: seasonSources.fetchSeasons }));
-  app.use('/api/v1/user', seasonRoutes(db, verifyToken, checkBanned, { fetchSeasons: seasonSources.fetchSeasons }));
-  app.use('/api/v1', friendsRoutes(db, verifyToken, checkBanned));
-  app.use('/api/v1/users', userProfileRoutes(db, verifyToken, checkBanned));
-  app.use('/api/v1/admin', adminRoutes(db, verifyToken, verifyModerator, verifyAdmin, logModeratorActivity));
-  app.use('/api/v1/moderator', moderatorRoutes(db, verifyToken, verifyModerator, logModeratorActivity));
-  const igdbV1 = igdbRoutes(optionalAuth, passThrough, db);
-  app.use('/api/v1/igdb', igdbLimiter, igdbV1);
-  app.use('/api/v1/people', require('./people')(optionalAuth, passThrough, { igdbFetch: igdbV1.igdbFetch }));
-  app.use('/api/v1/tmdb', igdbLimiter, tmdbRoutes(optionalAuth, passThrough, db));
-  app.use('/api/v1/kitsu', igdbLimiter, kitsuRoutes(optionalAuth, passThrough, db));
-  if (enrichRouter) app.use('/api/v1/enrich', igdbLimiter, enrichRouter);
-  console.log('  /api/v1 aliases loaded');
-} catch (error) {
-  console.error('  Error loading /api/v1 aliases:', error.message);
+  console.error('  Error loading routes:', error.message);
+  process.exit(1);
 }
 
 console.log('All routes loaded\n');

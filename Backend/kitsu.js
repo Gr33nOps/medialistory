@@ -1,7 +1,7 @@
-const express = require('express');
-const fetch = require('node-fetch');
+const { Router } = require('./http/router');
 const crypto = require('crypto');
 const { createTtlCache } = require('./cache');
+const { background } = require('./runtime');
 const { sanitizeToken, clampInt, rankSearchResults } = require('./igdbUtils');
 const { mediaToRow } = require('./tmdbUtils');
 const { normalizeKitsuAnime, categoriesFromIncluded } = require('./kitsuUtils');
@@ -32,7 +32,7 @@ const KITSU_STATUSES = new Set(['current', 'finished', 'tba', 'unreleased', 'upc
 const KITSU_AGE_RATINGS = new Set(['G', 'PG', 'R', 'R18']);
 
 module.exports = (verifyToken, checkBanned, db) => {
-  const router = express.Router();
+  const router = Router();
   const cache = createTtlCache();
 
   let lastCall = 0;
@@ -293,7 +293,7 @@ module.exports = (verifyToken, checkBanned, db) => {
         }
         const payload = normalized ? [normalized] : [];
         cache.set(cacheKey, payload, TTL.detail);
-        persist(payload).catch(() => {});
+        background(persist(payload));
         res.setHeader('X-Cache', 'MISS');
         return res.json(payload);
       }
@@ -423,7 +423,7 @@ module.exports = (verifyToken, checkBanned, db) => {
          seasons that are about to be folded away: they are still real entries,
          and the season list a library row opens is built out of them. Only the
          view collapses. */
-      persist(normalized).catch(() => {});
+      background(persist(normalized));
 
       /* Every anime carries its franchise, folded or not. It is one short
          string, and it means a caller never has to re-derive the grouping rule

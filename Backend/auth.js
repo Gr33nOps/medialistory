@@ -1,6 +1,5 @@
-const express = require('express');
+const { Router } = require('./http/router');
 const crypto = require('crypto');
-const fetch = require('node-fetch');
 const neonAuth = require('./neonAuth');
 const avatars = require('./avatars');
 const { clientError } = require('./errors');
@@ -63,8 +62,49 @@ const OAUTH_PROVIDERS = {
   }
 };
 
-module.exports = (db, jwt, JWT_SECRET, verifyToken, checkBanned) => {
-  const router = express.Router();
+// ── One-time OAuth hand-off codes ────────────────────────────────────────────
+// The callback sets an httpOnly session cookie, but when the frontend is on a
+// different origin (Vercel) than this API, SameSite=Lax stops that cookie from
+// being sent on the frontend's fetches. So the callback also mints a
+// short-lived, single-use code; the frontend exchanges it for the JWT (which it
+// stores in localStorage, exactly like email/password login).
+//
+// A store is { create(entry) -> code, consume(code) -> entry | null }, both
+// async. This one keeps codes in memory, which is right for a single Node
+// process. The Worker passes a Durable Object-backed store instead, because the
+// callback and the exchange can land on different isolates.
+const OAUTH_CODE_TTL_MS = 2 * 60 * 1000;
+
+function createMemoryOauthCodeStore() {
+  const codes = new Map(); // code -> { token, user, expiresAt }
+  function prune() {
+    const now = Date.now();
+    for (const [code, entry] of codes) {
+      if (!entry || entry.expiresAt <= now) codes.delete(code);
+    }
+  }
+  return {
+    async create(entry) {
+      prune();
+      const code = crypto.randomBytes(32).toString('hex');
+      codes.set(code, { ...entry, expiresAt: Date.now() + OAUTH_CODE_TTL_MS });
+      return code;
+    },
+    async consume(code) {
+      prune();
+      const key = String(code || '');
+      const entry = codes.get(key);
+      if (!entry) return null;
+      codes.delete(key); // single use
+      if (entry.expiresAt <= Date.now()) return null;
+      return { token: entry.token, user: entry.user };
+    }
+  };
+}
+
+module.exports = (db, jwt, JWT_SECRET, verifyToken, checkBanned, options = {}) => {
+  const router = Router();
+  const oauthCodes = options.oauthCodes || createMemoryOauthCodeStore();
 
   function sendAuthSession(res, token, user, extra = {}) {
     attachAuthCookie(res, token, !!extra.rememberMe);
@@ -101,7 +141,7 @@ module.exports = (db, jwt, JWT_SECRET, verifyToken, checkBanned) => {
       tv = Number(row?.token_version || 0);
     } catch (_) {}
     const expiresIn = rememberMe ? '30d' : '7d';
-    return jwt.sign({ userId, tv }, JWT_SECRET, { expiresIn });
+    return await jwt.sign({ userId, tv }, JWT_SECRET, { expiresIn });
   }
 
   function enabledProviders() {
@@ -129,36 +169,6 @@ module.exports = (db, jwt, JWT_SECRET, verifyToken, checkBanned) => {
   }
   function oauthCallbackUrl(req, provider) {
     return `${backendOrigin(req)}/api/auth/oauth/${provider}/callback`;
-  }
-
-  // ── One-time OAuth hand-off codes ──────────────────────────────────────────
-  // The callback sets an httpOnly session cookie, but when the frontend is on a
-  // different origin (Vercel) than this API (Render), SameSite=Lax stops that
-  // cookie from being sent on the frontend's fetches. So the callback also mints
-  // a short-lived, single-use code; the frontend exchanges it for the JWT (which
-  // it stores in localStorage, exactly like email/password login). Codes live in
-  // memory (single instance) and self-expire.
-  const OAUTH_CODE_TTL_MS = 2 * 60 * 1000;
-  const oauthCodes = new Map(); // code -> { token, user, expiresAt }
-  function pruneOauthCodes() {
-    const now = Date.now();
-    for (const [code, entry] of oauthCodes) {
-      if (!entry || entry.expiresAt <= now) oauthCodes.delete(code);
-    }
-  }
-  function createOauthCode(token, user) {
-    pruneOauthCodes();
-    const code = crypto.randomBytes(32).toString('hex');
-    oauthCodes.set(code, { token, user, expiresAt: Date.now() + OAUTH_CODE_TTL_MS });
-    return code;
-  }
-  function consumeOauthCode(code) {
-    pruneOauthCodes();
-    const entry = oauthCodes.get(String(code || ''));
-    if (!entry) return null;
-    oauthCodes.delete(code); // single use
-    if (entry.expiresAt <= Date.now()) return null;
-    return entry;
   }
 
   /** Which social providers the browser should offer (those actually configured). */
@@ -266,7 +276,7 @@ module.exports = (db, jwt, JWT_SECRET, verifyToken, checkBanned) => {
         clearState,
         `mgl_token=${encodeURIComponent(appToken)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSec}${secure}`
       ]);
-      const handoff = createOauthCode(appToken, formatUser(dbUser, null, req));
+      const handoff = await oauthCodes.create({ token: appToken, user: formatUser(dbUser, null, req) });
       return res.redirect(`${frontend}/auth.html?oauth=done&code=${encodeURIComponent(handoff)}`);
     } catch (error) {
       console.error('OAuth callback error:', error.message);
@@ -277,10 +287,13 @@ module.exports = (db, jwt, JWT_SECRET, verifyToken, checkBanned) => {
   // Exchange a one-time OAuth hand-off code (from the callback redirect) for the
   // app JWT. Used by the cross-origin frontend, where the session cookie set on
   // this origin can't be read. Codes are single-use and short-lived.
-  router.post('/oauth/exchange', (req, res) => {
+  router.post('/oauth/exchange', async (req, res) => {
     const code = String(req.body?.code || '').trim();
     if (!code) return res.status(400).json({ error: 'code is required' });
-    const entry = consumeOauthCode(code);
+    const entry = await oauthCodes.consume(code).catch((error) => {
+      console.error('OAuth code lookup failed:', error.message);
+      return null;
+    });
     if (!entry) return res.status(400).json({ error: 'This sign-in link has expired. Please try again.' });
     return res.json({ token: entry.token, user: entry.user });
   });
@@ -479,7 +492,7 @@ module.exports = (db, jwt, JWT_SECRET, verifyToken, checkBanned) => {
 
       let payload;
       try {
-        payload = jwt.verify(existing, JWT_SECRET);
+        payload = await jwt.verify(existing, JWT_SECRET);
       } catch (_) {
         return res.status(401).json({ error: 'Unauthorized' });
       }
@@ -567,3 +580,5 @@ module.exports = (db, jwt, JWT_SECRET, verifyToken, checkBanned) => {
 
   return router;
 };
+
+module.exports.OAUTH_CODE_TTL_MS = OAUTH_CODE_TTL_MS;
