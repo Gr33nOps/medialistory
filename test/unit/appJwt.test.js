@@ -1,5 +1,5 @@
 /* Sessions must survive the move between backends: a token issued by the
-   Render server (jsonwebtoken) has to verify on the Worker (jose) and the
+   legacy Node server (jsonwebtoken) has to verify on the Worker (jose) and the
    other way round. */
 const { test } = require('node:test');
 const assert = require('node:assert/strict');

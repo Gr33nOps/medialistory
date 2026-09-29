@@ -84,17 +84,9 @@ async function startOAuth(provider) {
     var nextParam = new URLSearchParams(window.location.search).get('next');
     if (nextParam) sessionStorage.setItem('oauthNext', nextParam);
     else sessionStorage.removeItem('oauthNext');
-    showOAuthWorking('Preparing secure sign-in…');
-    var ready = true;
-    if (typeof warmBackendForNavigation === 'function') {
-        ready = await warmBackendForNavigation(75000);
-    }
-    if (!ready) {
-        showOAuthError('We could not reach the sign-in server. Please try again.');
-        return;
-    }
-    // The API owns the provider callback. It is awake now, so the next screen
-    // will be Google/GitHub rather than Render's cold-start interstitial.
+    var providerName = provider === 'github' ? 'GitHub' : provider === 'google' ? 'Google' : 'sign-in';
+    showOAuthWorking('Taking you to ' + providerName + '…');
+    // The API owns the provider callback, so the flow starts on the API origin.
     window.location.href = API_BASE + '/auth/oauth/' + encodeURIComponent(provider) + '/start?remember=' + rememberVal;
 }
 
@@ -117,7 +109,7 @@ async function handleOAuthReturn() {
     try {
         var restored = null;
 
-        // Cross-origin (Vercel frontend → Render API): the session cookie the
+        // Cross-origin (Vercel frontend → Worker API): the session cookie the
         // callback set lives on the API origin and SameSite=Lax won't send it
         // here, so the callback also hands back a single-use code. Exchange it
         // for the JWT and store it (same mechanism as email/password login).
@@ -132,7 +124,7 @@ async function handleOAuthReturn() {
             if (ex.ok) restored = await ex.json();
         }
 
-        // Same-origin fallback (local dev, or Render self-serving): hydrate from
+        // Same-origin fallback (local dev, where the Worker serves both): hydrate from
         // the httpOnly session cookie.
         if (!restored || !restored.token) {
             if (typeof ensureSession === 'function') restored = await ensureSession();

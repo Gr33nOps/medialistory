@@ -152,7 +152,7 @@ module.exports = (verifyToken, checkBanned, db, options = {}) => {
       if (!tokenRes.ok || !tokenData.access_token) {
         // Twitch says why (e.g. "invalid client secret"); surface it without
         // ever logging the secret itself, so a bad/mismatched credential is
-        // diagnosable from the Render logs instead of silently degrading.
+        // diagnosable from the API logs instead of silently degrading.
         console.error(
           `[IGDB] Twitch token request failed (${tokenRes.status}): ${tokenData && tokenData.message ? tokenData.message : 'no access_token returned'}`
         );

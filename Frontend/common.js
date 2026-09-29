@@ -8,23 +8,19 @@
   // (it ships to every browser). Set to '' to disable.
   global.MGL_SENTRY_DSN = global.MGL_SENTRY_DSN ||
     'https://a031d4f07ac27ac8fd0107e89d564f9a@o4511927699439616.ingest.de.sentry.io/4512013714128976';
-  // The frontend is hosted on Vercel (instant static) and talks to the API on
-  // Render cross-origin. Resolution order:
+  // The frontend is hosted on Vercel and talks to the API on Cloudflare Workers
+  // cross-origin. Resolution order:
   //   1. window.MGL_API_BASE, if you set it explicitly (escape hatch).
-  //   2. localhost / *.onrender.com → same-origin `/api` (local dev, or the
-  //      Render service still self-serving the app as a fallback).
-  //   3. anything else (Vercel domain, custom domain) → the Render API origin.
-  // Keep this host in sync with the deployed backend (also used by the "waking
-  // the server" ping below).
-  var API_ORIGIN = 'https://medialistory.onrender.com';
+  //   2. localhost → same-origin `/api` (`npm run dev:worker` serves both).
+  //   3. anything else (Vercel domain, custom domain) → the Worker.
+  var API_ORIGIN = 'https://medialistory-api.gr33nops.workers.dev';
   function resolveApiBase() {
     if (typeof global.MGL_API_BASE === 'string' && global.MGL_API_BASE) {
       return global.MGL_API_BASE.replace(/\/$/, '');
     }
     var host = (location.hostname || '').toLowerCase();
     var isLocal = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host === '::1' || host === '[::1]';
-    var isBackendHost = /(^|\.)onrender\.com$/.test(host);
-    if (isLocal || isBackendHost) return '/api';
+    if (isLocal) return '/api';
     return API_ORIGIN + '/api';
   }
   var API_BASE = resolveApiBase();
@@ -173,58 +169,8 @@
     }
   }
 
-  // ── Backend readiness (Render cold-start aware) ────────────────────────────
-  // Render spins the free service down after inactivity; the first request after
-  // idle can take up to ~50s while it boots. The static frontend renders
-  // immediately from Vercel, so we track the API's readiness separately and show
-  // an honest "waking the server" notice (mountBackendWake) instead of letting
-  // data views sit on skeletons with no explanation.
-  var backendReady = false;
-  var _resolveReady;
-  var backendReadyPromise = new Promise(function (r) { _resolveReady = r; });
-  var pendingApiCalls = 0;      // in-flight apiFetch requests
-  var apiFetchStarted = false;  // has this page made any real data call yet
+  var pendingApiCalls = 0;      // in-flight apiFetch requests, drives the top bar
   var apiResponseCache = new Map();
-  function markBackendReady() {
-    if (backendReady) return;
-    backendReady = true;
-    // Remember the backend is awake so navigating between pages doesn't re-run
-    // the cold-start panel while it's still warm (see mountBackendWake).
-    try { localStorage.setItem('mgl:backendReadyAt', String(Date.now())); } catch (_) {}
-    try { _resolveReady(true); } catch (_) {}
-    try { document.dispatchEvent(new CustomEvent('mgl:backend-ready')); } catch (_) {}
-  }
-  function isBackendReady() { return backendReady; }
-  // Resolve true once the backend answers, or false after capMs.
-  function waitForBackend(capMs) {
-    if (backendReady) return Promise.resolve(true);
-    return Promise.race([
-      backendReadyPromise.then(function () { return true; }),
-      new Promise(function (r) { setTimeout(function () { r(false); }, capMs || 75000); })
-    ]);
-  }
-  // Health lives at the API origin root (/health), not under /api.
-  function healthUrl() {
-    return (API_BASE.charAt(0) === '/') ? '/health' : API_BASE.replace(/\/api\/?$/, '') + '/health';
-  }
-  function pingHealth(timeoutMs) {
-    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    var timer = ctrl ? setTimeout(function () { try { ctrl.abort(); } catch (_) {} }, timeoutMs || 6000) : null;
-    return fetch(healthUrl(), { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined })
-      .then(function (r) { return !!(r && r.ok); })
-      .catch(function () { return false; })
-      .then(function (ok) { if (timer) clearTimeout(timer); if (ok) markBackendReady(); return ok; });
-  }
-
-  // OAuth has to leave the frontend and navigate to the API origin. Wake that
-  // origin first so a sleeping Render service never replaces our sign-in page
-  // with its generic holding screen. mountBackendWake may already be polling;
-  // both paths resolve through the same readiness promise.
-  function warmBackendForNavigation(capMs) {
-    if (!apiIsCrossOrigin() || backendReady) return Promise.resolve(true);
-    pingHealth(8000);
-    return waitForBackend(capMs || 75000);
-  }
 
   function esc(str) {
     if (str == null) return '';
@@ -242,9 +188,9 @@
 
   /**
    * Restore session from Bearer JWT and/or httpOnly cookie.
-   * Always send Authorization when localStorage has a token - cookie-only
-   * restore fails on Vercel→Render rewrites and was wiping valid sessions
-   * on every nav click.
+   * Always send Authorization when localStorage has a token: the API is on
+   * another site, so its SameSite=Lax cookie is not sent with these requests,
+   * and a cookie-only restore would wipe valid sessions on every nav click.
    */
   async function ensureSession() {
     var had = getToken();
@@ -325,7 +271,7 @@
     var opts = Object.assign({}, supplied);
     delete opts.mglCacheMs;
     opts.headers = authHeaders(opts.headers || {});
-    // Cross-origin API (direct Render) needs include; same-origin keeps cookies simple.
+    // Cross-origin API (the Worker) needs include; same-origin keeps cookies simple.
     opts.credentials = opts.credentials || (apiIsCrossOrigin() ? 'include' : 'same-origin');
     opts.cache = opts.cache || 'no-store';
     var method = String(opts.method || 'GET').toUpperCase();
@@ -333,17 +279,10 @@
     if (cacheKey) {
       var cached = apiResponseCache.get(cacheKey);
       if (cached && cached.expiresAt > Date.now()) {
-        markBackendReady();
         return Promise.resolve(cached.response.clone());
       }
       if (cached) apiResponseCache.delete(cacheKey);
     }
-    // Only idempotent GETs are safe to auto-retry, and only when the caller isn't
-    // managing its own abort signal (retrying a spent controller would fail).
-    var canRetry = method === 'GET' && !opts.signal && apiIsCrossOrigin();
-    // Track real data activity so the cold-start panel only appears on pages that
-    // actually wait on the API (not static pages like About/Terms).
-    apiFetchStarted = true;
     pendingApiCalls++;
     // Every data call drives the top bar, so there is always a visible sign
     // that something is loading, not only on full page navigations.
@@ -358,25 +297,14 @@
       }
     }
     return fetch(API_BASE + path, opts).then(function (res) {
-      if (res && res.ok) markBackendReady();
       if (cacheKey && res && res.ok && typeof res.clone === 'function') {
         apiResponseCache.set(cacheKey, { response: res.clone(), expiresAt: Date.now() + cacheMs });
       }
       fin();
       return res;
-    }).catch(function (err) {
-      // A network failure while the backend hasn't answered yet almost always
-      // means Render is still cold. Wait for it to wake, then retry once so the
-      // page recovers on its own instead of flashing an error. Keep the request
-      // counted as pending while we wait, so the "starting" panel stays up.
-      if (!canRetry || backendReady) { fin(); throw err; }
-      return waitForBackend(75000).then(function (ready) {
-        if (!ready) { fin(); throw err; }
-        return fetch(API_BASE + path, opts).then(
-          function (r) { fin(); return r; },
-          function (e) { fin(); throw e; }
-        );
-      });
+    }, function (err) {
+      fin();
+      throw err;
     });
   }
 
@@ -1525,139 +1453,6 @@
   global.startTopProgress = startTopProgress;
   global.finishTopProgress = finishTopProgress;
 
-  // ── "Waking the server" notice (Render cold start) ─────────────────────────
-  // Only runs when the API is cross-origin (Vercel → Render). The page is already
-  // interactive; this is a quiet, honest status line that appears only if the
-  // backend doesn't answer within a short grace window, and clears itself the
-  // moment it does. No full-screen blocker - the frontend never waits on it.
-  function mountBackendWake() {
-    if (typeof document === 'undefined' || !document.body) return;
-    if (API_BASE.charAt(0) === '/') { markBackendReady(); return; } // same-origin: already up
-    if (document.getElementById('backendWake')) return;
-
-    // If the backend answered recently (this browser), treat it as still warm and
-    // skip the panel entirely - otherwise every page navigation re-checks from
-    // scratch and the cross-origin latency flashes "Server ready" each time.
-    // A backend that answered recently is treated as still warm: no health poll
-    // and no panel on arrival, so moving between pages never flashes a notice.
-    // Requests are still watched below, so one that does hang explains itself.
-    var recentlyReady = false;
-    try {
-      var readyAt = parseInt(localStorage.getItem('mgl:backendReadyAt') || '0', 10);
-      recentlyReady = !!readyAt && (Date.now() - readyAt) < 10 * 60 * 1000;
-    } catch (_) {}
-    if (recentlyReady) markBackendReady();
-
-    var GRACE_MS = 2500, MAX_MS = 75000, POLL_MS = 2500;
-    var startedAt = Date.now();
-    var el = null, hideTimer = null, elapsedTimer = null, stopped = false;
-
-    var COPY = {
-      waking: {
-        t: 'Starting the server',
-        m: 'The API goes to sleep when it isn’t being used. It’s waking up now. The first visit usually takes 30 to 60 seconds, then your page fills in on its own.'
-      },
-      ready: { t: 'Server ready', m: 'Loading your page…' },
-      error: { t: 'Still can’t reach the server', m: 'This is taking longer than usual. Check your connection, then try again.' }
-    };
-
-    function build() {
-      if (el) return el;
-      el = document.createElement('div');
-      el.id = 'backendWake';
-      el.className = 'backend-wake';
-      el.setAttribute('role', 'status');
-      el.setAttribute('aria-live', 'polite');
-      el.hidden = true;
-      el.innerHTML =
-        '<div class="backend-wake-panel">' +
-          '<span class="backend-wake-ind" aria-hidden="true"></span>' +
-          '<div class="backend-wake-body">' +
-            '<strong class="backend-wake-title"></strong>' +
-            '<span class="backend-wake-msg"></span>' +
-            '<div class="backend-wake-bar" aria-hidden="true"><span></span></div>' +
-            '<span class="backend-wake-meta">Waking up… <span class="backend-wake-elapsed">0s</span></span>' +
-            '<button type="button" class="backend-wake-retry" hidden>Try again</button>' +
-          '</div>' +
-        '</div>';
-      document.body.appendChild(el);
-      el.querySelector('.backend-wake-retry').addEventListener('click', function () {
-        startedAt = Date.now(); stopped = false; setState('waking'); poll();
-      });
-      return el;
-    }
-    function startElapsed() {
-      if (elapsedTimer) return;
-      var span = el.querySelector('.backend-wake-elapsed');
-      var upd = function () { if (span) span.textContent = Math.max(0, Math.round((Date.now() - startedAt) / 1000)) + 's'; };
-      upd();
-      elapsedTimer = setInterval(upd, 1000);
-    }
-    function stopElapsed() { if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; } }
-    function setState(state) {
-      build();
-      var c = COPY[state] || COPY.waking;
-      el.hidden = false;
-      el.setAttribute('data-state', state);
-      el.classList.remove('is-out');
-      el.querySelector('.backend-wake-title').textContent = c.t;
-      var msg = el.querySelector('.backend-wake-msg');
-      msg.textContent = c.m; msg.hidden = !c.m;
-      el.querySelector('.backend-wake-bar').hidden = (state !== 'waking');
-      el.querySelector('.backend-wake-meta').hidden = (state !== 'waking');
-      el.querySelector('.backend-wake-retry').hidden = (state !== 'error');
-      if (state === 'waking') startElapsed(); else stopElapsed();
-    }
-    function hide() {
-      stopElapsed();
-      if (!el) return;
-      el.classList.add('is-out');
-      setTimeout(function () { if (el) { el.hidden = true; el.removeAttribute('data-state'); el.classList.remove('is-out'); } }, 350);
-    }
-    // Show the panel only when this page is genuinely waiting on the API and the
-    // backend hasn't answered within the grace window - so static pages never see it.
-    function maybeShow() {
-      if (stopped || backendReady || el && !el.hidden && el.getAttribute('data-state') === 'waking') return;
-      if (apiFetchStarted && (Date.now() - startedAt > GRACE_MS)) setState('waking');
-    }
-    function onReady() {
-      stopped = true;
-      stopElapsed();
-      if (!el || el.hidden) return;
-      if (el.getAttribute('data-state') !== 'ready') setState('ready');
-      /* Always re-arm the hide. This used to clear a pending hide up front and
-         then skip rescheduling it whenever the panel was already in the ready
-         state, so the second onReady (poll() calls it again once the backend has
-         answered) cancelled the dismissal and left "Server ready" on screen for
-         good, over a page that had finished loading. */
-      if (hideTimer) clearTimeout(hideTimer);
-      hideTimer = setTimeout(hide, 900);
-    }
-    function poll() {
-      if (stopped || backendReady) { onReady(); return; }
-      pingHealth(6000).then(function (ok) {
-        if (backendReady || ok) { onReady(); return; }
-        if (stopped) return;
-        if (Date.now() - startedAt > MAX_MS) { setState('error'); return; }
-        maybeShow();
-        setTimeout(poll, POLL_MS);
-      });
-    }
-
-    // Ordinary slow requests use their local skeleton/spinner. The server panel
-    // belongs exclusively to the initial health probe; wiring it to all API
-    // activity made searches, image loading, and tab switches look like cold
-    // starts even though the backend was already awake.
-    document.addEventListener('mgl:backend-ready', onReady);
-    // Only a genuinely cold start polls /health; a warm backend stays silent.
-    if (!recentlyReady) { setTimeout(maybeShow, GRACE_MS); poll(); }
-  }
-  global.mountBackendWake = mountBackendWake;
-  global.isBackendReady = isBackendReady;
-  global.waitForBackend = waitForBackend;
-  global.warmBackendForNavigation = warmBackendForNavigation;
-  global.backendReadyPromise = backendReadyPromise;
-
   // ── Aurora atmosphere ──────────────────────────────────────────────────────
   // One reusable environmental light layer behind all content (dark theme only,
   // via CSS). Colours come from the page's category (CSS --au-* on body[data-page]);
@@ -1755,7 +1550,6 @@
       document.addEventListener('DOMContentLoaded', function () {
         initDensity();
         mountTopProgress();
-        mountBackendWake();
         mountAppNav();
         mountAurora();
         mountPageHeader();
@@ -1767,7 +1561,6 @@
     } else {
       initDensity();
       mountTopProgress();
-      mountBackendWake();
       mountAppNav();
       mountAurora();
       mountPageHeader();

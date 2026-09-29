@@ -19,12 +19,13 @@ window to fix the issue before any public disclosure.
 ## Scope
 
 In scope: this repository and the live app at
-[medialistory.onrender.com](https://medialistory.onrender.com) - for example
+[medialistory.vercel.app](https://medialistory.vercel.app) and its API at
+`medialistory-api.gr33nops.workers.dev` - for example
 authentication/session handling, access control between users, injection, or
 data exposure.
 
 Out of scope: findings against third-party providers (TMDB, Kitsu, IGDB/Twitch,
-Neon, Render, Sentry) themselves, and reports that require a compromised device
+Neon, Cloudflare, Vercel, Sentry) themselves, and reports that require a compromised device
 or physical access.
 
 ## Good to know
