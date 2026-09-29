@@ -13,6 +13,11 @@
   "upload_source_maps": true,
   "observability": { "enabled": true },
 
+  // Most API requests make several sequential queries to Neon (AWS us-east-2).
+  // Smart Placement runs the Worker near the database for those, instead of
+  // paying a cross-ocean round trip per query from the visitor's location.
+  "placement": { "mode": "smart" },
+
   // Knex ships a dialect for every database it supports and requires their
   // drivers lazily. Only Postgres is used; the rest resolve to an empty module.
   "alias": {
@@ -30,7 +35,7 @@
   // reads its own writes (add a title, then list the library), and Hyperdrive
   // does not invalidate cached reads on write.
   "hyperdrive": [
-    { "binding": "HYPERDRIVE", "id": "REPLACE_WITH_PRODUCTION_HYPERDRIVE_ID" }
+    { "binding": "HYPERDRIVE", "id": "8f1f31eb9d3d4f2f8419879f4cf81d0a" }
   ],
 
   // Auth rate-limit windows, one-time OAuth codes and the shared IGDB token.
@@ -47,7 +52,7 @@
   "vars": {
     "NODE_ENV": "production",
     "FRONTEND_URL": "https://medialistory.vercel.app",
-    "BACKEND_URL": "",
+    "BACKEND_URL": "https://medialistory-api.gr33nops.workers.dev",
     "ALLOWED_ORIGINS": "",
     "ENRICH_DEALS": "1",
     "ENRICH_ANIME": "1",
@@ -60,8 +65,9 @@
     // and its own secrets.
     "staging": {
       "name": "medialistory-api-staging",
+      "placement": { "mode": "smart" },
       "hyperdrive": [
-        { "binding": "HYPERDRIVE", "id": "REPLACE_WITH_STAGING_HYPERDRIVE_ID" }
+        { "binding": "HYPERDRIVE", "id": "d68f9b6d8ed44032b93343a771d056d2" }
       ],
       "durable_objects": {
         "bindings": [{ "name": "STATE_STORE", "class_name": "StateStore" }]
@@ -71,8 +77,8 @@
       ],
       "vars": {
         "NODE_ENV": "production",
-        "FRONTEND_URL": "https://medialistory.vercel.app",
-        "BACKEND_URL": "",
+        "FRONTEND_URL": "https://medialistory-git-cf-staging-gr33nops-projects.vercel.app",
+        "BACKEND_URL": "https://medialistory-api-staging.gr33nops.workers.dev",
         "ALLOWED_ORIGINS": "",
         "ENRICH_DEALS": "1",
         "ENRICH_ANIME": "1",
