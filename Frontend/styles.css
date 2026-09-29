@@ -2641,8 +2641,7 @@ body[data-page="games"] .score-slider-thumb, [data-cat="games"] .score-slider-th
     border-right: 1px solid var(--border-subtle);
 }
 
-.auth-brand { display: inline-flex; align-items: center; gap: 10px; width: fit-content; color: var(--text-primary); font-family: var(--font-display); font-size: 1.2rem; font-weight: 800; text-decoration: none; }
-.auth-brand img { display: block; }
+.auth-brand { display: inline-flex; align-items: center; width: fit-content; color: var(--text-primary); font-family: var(--font-display); font-size: 1.2rem; font-weight: 800; text-decoration: none; }
 .auth-intro-copy { max-width: 510px; }
 .auth-intro-copy h2 { margin: 10px 0 18px; color: var(--text-primary); font-family: var(--font-display); font-size: clamp(2rem, 4vw, 3.5rem); line-height: 1.05; letter-spacing: -.045em; text-wrap: balance; }
 .auth-intro-copy > p:last-of-type { max-width: 48ch; color: var(--text-secondary); line-height: 1.65; }
