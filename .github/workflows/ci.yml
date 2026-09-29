@@ -78,6 +78,12 @@ jobs:
       - name: Unit + smoke tests
         run: npm test
 
+      - name: Bundle the Worker (no deploy)
+        run: npx wrangler deploy --dry-run --env= --outdir .wrangler/dryrun
+
+      - name: Worker tests (local workerd)
+        run: npm run test:worker
+
       - name: Assert relative API_BASE
         run: |
           ! grep -R "http://localhost:3000/api" Frontend --include='*.js'
@@ -114,4 +120,4 @@ jobs:
             --config p/owasp-top-ten \
             --severity WARNING --severity ERROR \
             --error --disable-version-check \
-            Backend Frontend
+            Backend Frontend worker

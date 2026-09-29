@@ -45,3 +45,11 @@ MediaListory-Learning-Guide.pdf
 # Local screenshots (audit captures)
 /m[0-9]*.png
 /n[0-9]*.png
+
+# Cloudflare Workers local state and secrets
+.wrangler/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+secrets.*.json
+.env.cloudflare

@@ -1,0 +1,83 @@
+// MediaListory API on Cloudflare Workers. See docs/cloudflare-workers.md.
+//
+// Secrets are never stored here. Set them with `npx wrangler secret put NAME`
+// (add `--env staging` for staging); the full list is in the docs.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "medialistory-api",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "upload_source_maps": true,
+  "observability": { "enabled": true },
+
+  // Knex ships a dialect for every database it supports and requires their
+  // drivers lazily. Only Postgres is used; the rest resolve to an empty module.
+  "alias": {
+    "better-sqlite3": "./worker/empty-module.js",
+    "mysql": "./worker/empty-module.js",
+    "mysql2": "./worker/empty-module.js",
+    "oracledb": "./worker/empty-module.js",
+    "pg-native": "./worker/empty-module.js",
+    "pg-query-stream": "./worker/empty-module.js",
+    "sqlite3": "./worker/empty-module.js",
+    "tedious": "./worker/empty-module.js"
+  },
+
+  // Neon Postgres through Hyperdrive. Created with --caching-disabled: the app
+  // reads its own writes (add a title, then list the library), and Hyperdrive
+  // does not invalidate cached reads on write.
+  "hyperdrive": [
+    { "binding": "HYPERDRIVE", "id": "REPLACE_WITH_PRODUCTION_HYPERDRIVE_ID" }
+  ],
+
+  // Auth rate-limit windows, one-time OAuth codes and the shared IGDB token.
+  "durable_objects": {
+    "bindings": [{ "name": "STATE_STORE", "class_name": "StateStore" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["StateStore"] }],
+
+  // 60 catalog requests per minute per IP, as express-rate-limit enforced.
+  "ratelimits": [
+    { "name": "CATALOG_RATE_LIMITER", "namespace_id": "4101", "simple": { "limit": 60, "period": 60 } }
+  ],
+
+  "vars": {
+    "NODE_ENV": "production",
+    "FRONTEND_URL": "https://medialistory.vercel.app",
+    "BACKEND_URL": "",
+    "ALLOWED_ORIGINS": "",
+    "ENRICH_DEALS": "1",
+    "ENRICH_ANIME": "1",
+    "ENRICH_EPISODES": "1"
+  },
+
+  "env": {
+    // Pre-production copy used to verify the migration: its own Worker, its
+    // own Hyperdrive config (pointing at a Neon branch, not production data)
+    // and its own secrets.
+    "staging": {
+      "name": "medialistory-api-staging",
+      "hyperdrive": [
+        { "binding": "HYPERDRIVE", "id": "REPLACE_WITH_STAGING_HYPERDRIVE_ID" }
+      ],
+      "durable_objects": {
+        "bindings": [{ "name": "STATE_STORE", "class_name": "StateStore" }]
+      },
+      "ratelimits": [
+        { "name": "CATALOG_RATE_LIMITER", "namespace_id": "4102", "simple": { "limit": 60, "period": 60 } }
+      ],
+      "vars": {
+        "NODE_ENV": "production",
+        "FRONTEND_URL": "https://medialistory.vercel.app",
+        "BACKEND_URL": "",
+        "ALLOWED_ORIGINS": "",
+        "ENRICH_DEALS": "1",
+        "ENRICH_ANIME": "1",
+        "ENRICH_EPISODES": "1"
+      }
+    }
+  }
+}

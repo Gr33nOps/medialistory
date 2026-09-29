@@ -1,5 +1,6 @@
 const { Router } = require('./http/router');
 const taste = require('./taste');
+const { background } = require('./runtime');
 const { clientError } = require('./errors');
 const { parseIgdbClientId, slugify } = require('./igdbUtils');
 const { parseMediaRef, externalRef, isValidMediaType, providerFor } = require('./tmdbUtils');
@@ -215,14 +216,14 @@ module.exports = (db, verifyToken, checkBanned, deps = {}) => {
      recognise a sibling later. */
   function cacheSeasonsInBackground(gameRowId) {
     if (typeof deps.fetchSeasons !== 'function') return;
-    setImmediate(async () => {
+    background((async () => {
       try {
         const game = await db('games').where('id', gameRowId)
           .first('id', 'game_id', 'name', 'media_type', 'tmdb_id', 'provider_id');
         if (!game || (game.media_type !== 'anime' && game.media_type !== 'series')) return;
         await ensureSeasons(db, game, deps.fetchSeasons);
       } catch (_) { /* a missing season list is not a failed add */ }
-    });
+    })());
   }
 
   router.post('/games', verifyToken, checkBanned, async (req, res) => {

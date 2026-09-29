@@ -14,6 +14,8 @@
    promise becomes next(err), as in Express 5), and HEAD answered by GET routes.
    Matching is case-insensitive and ignores a trailing slash, like Express. */
 
+const { background } = require('../runtime');
+
 const METHODS = ['get', 'post', 'put', 'patch', 'delete'];
 
 function escapeRegExp(s) {
@@ -31,9 +33,11 @@ function compile(path, end) {
     }
     return escapeRegExp(segment);
   }).join('/');
+  /* Paths come from route definitions in code, never from a request, and
+     every literal segment is escaped above; the only pattern is [^/]+?. */
   const regexp = end
-    ? new RegExp(`^${source}\\/?$`, 'i')
-    : new RegExp(`^${source}(?=\\/|$)`, 'i');
+    ? new RegExp(`^${source}\\/?$`, 'i') // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
+    : new RegExp(`^${source}(?=\\/|$)`, 'i'); // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
   return { regexp, keys };
 }
 
@@ -47,11 +51,14 @@ function splitUrl(url) {
 }
 
 // Run a handler; a thrown error or rejected promise is passed to next().
+// An async handler can keep working after it has answered, so on Workers its
+// promise is registered as background work to keep the request alive.
 function invoke(fn, args, next) {
   try {
     const result = fn(...args);
     if (result && typeof result.then === 'function') {
       result.then(undefined, (err) => next(err || new Error('Rejected without a reason')));
+      background(result);
     }
   } catch (err) {
     next(err);

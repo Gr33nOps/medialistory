@@ -1,0 +1,15 @@
+# Local secrets for `npm run dev:worker`. Copy to .dev.vars (git-ignored).
+# Never put production values here; use a Neon branch and test credentials.
+NODE_ENV=development
+FRONTEND_URL=http://localhost:8787
+BACKEND_URL=http://localhost:8787
+JWT_SECRET=change-me-to-a-long-random-string
+NEON_AUTH_BASE_URL=https://<ep>.neonauth.<region>.aws.neon.tech/neondb/auth
+NEON_AUTH_JWKS_URL=
+IGDB_CLIENT_ID=
+IGDB_CLIENT_SECRET=
+TMDB_ACCESS_TOKEN=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=

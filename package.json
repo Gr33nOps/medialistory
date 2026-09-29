@@ -8,7 +8,11 @@
     "dev": "nodemon Backend/server.js",
     "test": "node --test ./test/unit/*.test.js ./test/smoke/*.test.js",
     "test:e2e": "playwright test",
-    "test:ui": "node test/e2e/ui-polish.cjs"
+    "test:ui": "node test/e2e/ui-polish.cjs",
+    "test:worker": "node --test --test-concurrency=1 ./test/worker/*.test.js",
+    "dev:worker": "wrangler dev --env= --assets Frontend",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env="
   },
   "keywords": [
     "games",
@@ -35,6 +39,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@sentry/cloudflare": "^11.1.0",
     "@sentry/node": "^8.55.0",
     "compression": "^1.8.1",
     "cors": "^2.8.6",
@@ -43,10 +48,8 @@
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.1.0",
     "jose": "^6.2.10",
-    "jsonwebtoken": "^9.0.3",
     "knex": "^3.1.0",
     "morgan": "^1.10.0",
-    "node-fetch": "^2.7.0",
     "pg": "^8.18.0"
   },
   "optionalDependencies": {
@@ -56,6 +59,8 @@
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "jsdom": "^29.1.1",
-    "nodemon": "^3.1.10"
+    "jsonwebtoken": "^9.0.3",
+    "nodemon": "^3.1.10",
+    "wrangler": "^4.143.0"
   }
 }
