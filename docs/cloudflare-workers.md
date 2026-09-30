@@ -105,6 +105,15 @@ The first deploy creates the `StateStore` Durable Object class (migration
 `v1`). Set `BACKEND_URL` in `wrangler.jsonc` to the URL Wrangler prints, and
 deploy again.
 
+**Automatic deploys.** [`deploy-worker.yml`](../.github/workflows/deploy-worker.yml)
+deploys production when `Backend/`, `worker/`, `wrangler.jsonc` or the
+package files change on `main` (tests first, `/ready` after), so the API
+keeps pace with Vercel's frontend deploys. It needs two repository secrets:
+`CLOUDFLARE_API_TOKEN` (a scoped token: Workers Scripts Edit, Account
+Settings Read; never the Global API Key) and `CLOUDFLARE_ACCOUNT_ID`.
+Without them it skips with a warning. Secrets and Hyperdrive configs are not
+touched by it.
+
 ### OAuth callbacks
 
 The provider redirects to `<BACKEND_URL>/api/auth/oauth/<provider>/callback`.
