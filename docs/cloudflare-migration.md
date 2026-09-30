@@ -1,7 +1,7 @@
 # Render → Cloudflare Workers migration
 
-This is the working record for moving the MediaListory API off Render and onto
-Cloudflare Workers. Section 1 is the inventory of the Express backend as it ran
+This is the record of moving the MediaListory API from a Node/Express server on a
+single host to Cloudflare Workers. Section 1 is the inventory of the Express backend as it ran
 on Render, taken before any code changed. Section 2 lists everything in that
 backend that assumes a long-lived Node process, and what replaces it.
 Deployment, local development and the environment-variable mapping live in
@@ -48,7 +48,7 @@ present (banned users get 403); **user** = `verifyToken` + `checkBanned`;
 | GET | `/health` | public | `{status:"ok", uptime}` |
 | GET | `/ready` | public | `{status:"ready", db:true, igdb:bool, rateLimitStore}` or `503 {status:"not_ready", db:false}` |
 
-**`/api/auth`** (`auth.js`) — auth limiter: 40 requests / 15 min / IP, except
+**`/api/auth`** (`auth.js`): auth limiter: 40 requests / 15 min / IP, except
 `GET /public-config`, `GET /session`, `GET /me`.
 
 | Method | Path | Auth | Notes |
@@ -69,7 +69,7 @@ present (banned users get 403); **user** = `verifyToken` + `checkBanned`;
 | POST | `/reset-password` | public | |
 | POST | `/logout` | public | Clears `mgl_token` |
 
-**`/api`** (`home.js`): `GET /games`, `GET /games/:id` — public catalog reads from Postgres.
+**`/api`** (`home.js`): `GET /games`, `GET /games/:id`, public catalog reads from Postgres.
 
 **`/api/user`** (three routers, tried in this order)
 
@@ -98,7 +98,7 @@ image, `Cross-Origin-Resource-Policy: cross-origin`, ETag/304), and **user**:
 **`/api/moderator`** (**mod**): `GET /stats`, `GET /users`, `PUT /users/:id/ban|unban`,
 `GET /activity`. Moderator actions are written to `moderator_activity`.
 
-**Catalog proxies** — **optional** auth. One shared "catalog" limiter:
+**Catalog proxies** (**optional** auth). One shared "catalog" limiter:
 60 requests / min / IP across IGDB, TMDB, Kitsu and enrichment.
 
 | Mount | Routes | Upstream |
@@ -200,70 +200,15 @@ IGDB, TMDB, Kitsu, CheapShark, Jikan, AnimeThemes, TVmaze, Sentry (optional).
 | Static frontend fallback on the API host | Vercel serves the frontend | API-only Worker; browser navigations to non-API paths redirect to `FRONTEND_URL` |
 | In-process TTL caches (catalog, enrichment, Similar Taste) | Per isolate, not per process | Kept as-is; they are best-effort and every miss falls through to the source of truth |
 
-## 3. Cutover record (2026-09-29)
+## 3. Outcome
 
-- Production Worker: `medialistory-api` at `https://medialistory-api.gr33nops.workers.dev`,
-  Hyperdrive `medialistory-neon-production` (caching disabled) to the Neon
-  `production` branch.
-- Staging Worker: `medialistory-api-staging`, Hyperdrive `medialistory-neon-staging`
-  to the Neon branch `cf-worker-staging`. Frontend preview: branch `cf-staging`.
-- Verified before cutover: `test/deployed/worker-smoke.mjs` 13/13 on staging
-  (session, catalog, library, tracking, seasons, custom lists, export, profile,
-  social); the real frontend on the staging preview; read-only checks on the
-  production Worker, including that sessions signed by Render are accepted.
-- Cutover: `main` fast-forwarded to `cf28ba2`. Vercel production now calls the
-  Worker. The previous Vercel production deployment was
-  `dpl_JE7QefzKYUjxM11Ebwkz9FePF4gW` (commit `f43cb7c`).
-- Fixed on the way (both were failing on Render too): adding a title to a
-  custom list, and exporting a backup.
+The Worker serves the same routes, methods, request and response shapes, status
+codes and error messages as the Express server. Sessions issued by either backend
+are accepted by the other, because both sign the same HS256 tokens with the same
+secret. Two bugs found by the staging smoke test were fixed on the way: adding a
+title to a custom list, and exporting a backup when the optional
+`media_external_ids` table is missing.
 
-## 4. Rollback
-
-The database and the session secret are shared, so rolling back moves no data
-and signs nobody out.
-
-1. **Vercel:** Deployments → `dpl_JE7QefzKYUjxM11Ebwkz9FePF4gW` → **Instant
-   Rollback** (or redeploy commit `f43cb7c`). The frontend calls
-   `medialistory.onrender.com` again. This is the whole rollback for email/password
-   and Google sign-in.
-2. **GitHub OAuth App:** set the callback URL back to
-   `https://medialistory.onrender.com/api/auth/oauth/github/callback`.
-3. **Render** already runs the same handlers (it redeploys `main`; the current
-   deploy includes the list/export fixes). If it was suspended, resume it first.
-   Expect Render's cold starts again: the `f43cb7c` frontend still has the
-   waking-the-server panel for that.
-4. Nothing to do on Neon or Google: both redirect URIs stay registered, and no
-   schema changed.
-
-Roll forward again by promoting the current production deployment on Vercel and
-restoring the GitHub callback URL.
-
-## 5. Remaining manual steps
-
-**Cloudflare**
-- Wrangler is authenticated with the account's Global API Key (`.env.cloudflare`,
-  git-ignored). Create a scoped API token (Workers Scripts, Hyperdrive and
-  Account Settings), switch `.env.cloudflare` to `CLOUDFLARE_API_TOKEN`, then
-  roll the Global API Key (My Profile → API Tokens → Global API Key → Change).
-- Workers Free allows 10 ms CPU per request. Measured on staging: median 9 ms,
-  p95 about 20 ms, all requests completed. Check Workers Logs for
-  `exceededCpu` occasionally; if it shows up, Workers Paid lifts the limit.
-
-**Render** (keep both for a rollback window, e.g. two weeks)
-- `medialistory` (medialistory.onrender.com): suspend, later delete.
-- `MediaListory` (mygamelist-ffyl.onrender.com) also auto-deploys this repo's
-  `main` and is not used by the site: suspend or delete.
-- Until then both redeploy on every push to `main`; that is harmless.
-
-**Neon**
-- Branch `cf-worker-staging` backs the staging Worker. Keep it for future
-  staging runs or delete it (Neon Console → Branches); delete the staging
-  Worker and its Hyperdrive config with it. It contains a synthetic user
-  `cf_smoke_tester` used by the smoke test.
-- Optional: apply `DB/migrations/add-external-id-map.sql` to production. It adds
-  one new table; exports then include MyAnimeList ids and detail-page extras
-  stop re-resolving ids on every view. Nothing breaks without it.
-
-**Google / GitHub**
-- After the rollback window, remove the Render redirect URI from the Google
-  OAuth client.
+The Express server (`npm start`) is kept as a fallback. Rolling back means pointing
+the frontend's `API_ORIGIN` (`Frontend/common.js`) and the CSP in `vercel.json`
+back at it; the database and the session secret are shared, so no data moves.

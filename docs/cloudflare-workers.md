@@ -32,7 +32,7 @@ Secrets are set with Wrangler and never committed. Plain settings live in
 | `NEON_AUTH_JWKS_URL` | `NEON_AUTH_JWKS_URL` | secret | Optional; defaults to `<base>/.well-known/jwks.json`. |
 | `IGDB_CLIENT_ID` | `IGDB_CLIENT_ID` | secret | |
 | `IGDB_CLIENT_SECRET` | `IGDB_CLIENT_SECRET` | secret | The Worker mints and shares the Twitch token itself. |
-| `IGDB_ACCESS_TOKEN` | — | dropped | Not needed while the client secret is set. |
+| `IGDB_ACCESS_TOKEN` | none | dropped | Not needed while the client secret is set. |
 | `TMDB_ACCESS_TOKEN` / `TMDB_API_KEY` | same names | secret | Either one. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | same names | secret | Add the Worker callback URL to the Google client first (below). |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | same names | secret | A GitHub OAuth App has one callback URL, so the Worker uses its own app (below). |
@@ -42,10 +42,10 @@ Secrets are set with Wrangler and never committed. Plain settings live in
 | `ALLOWED_ORIGINS` | `ALLOWED_ORIGINS` | var | Extra browser origins, comma-separated (e.g. a Vercel preview). |
 | `NODE_ENV` | `NODE_ENV` | var | `production`: `Secure` cookies, no error detail, localhost origins refused. |
 | `ENRICH_DEALS`, `ENRICH_ANIME`, `ENRICH_EPISODES` | same names | var | `0` switches a source off. |
-| `PORT`, `ALLOW_DEGRADED`, `DB_SSL_INSECURE` | — | dropped | No process, no listener, Hyperdrive owns TLS. |
-| `REDIS_URL`, `REDIS_PREFIX` | — | dropped | Replaced by the Durable Object and the Rate Limiting binding. |
-| `CATALOG_WARM_MS` | — | dropped | Warmer removed. |
-| `RENDER`, `RENDER_GIT_COMMIT` | — | dropped | Render-only. |
+| `PORT`, `ALLOW_DEGRADED`, `DB_SSL_INSECURE` | none | dropped | No process, no listener, Hyperdrive owns TLS. |
+| `REDIS_URL`, `REDIS_PREFIX` | none | dropped | Replaced by the Durable Object and the Rate Limiting binding. |
+| `CATALOG_WARM_MS` | none | dropped | Warmer removed. |
+| `RENDER`, `RENDER_GIT_COMMIT` | none | dropped | Render-only. |
 
 Bindings (declared in `wrangler.jsonc`): `HYPERDRIVE`, `STATE_STORE`,
 `CATALOG_RATE_LIMITER`.
