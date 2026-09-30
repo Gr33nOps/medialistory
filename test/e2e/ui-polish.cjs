@@ -5,7 +5,7 @@ const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const base = process.env.BASE_URL || 'http://localhost:3000';
+const base = process.env.BASE_URL || 'http://localhost:8787';
 if (!/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(base)) throw new Error('Use a local server for this verification.');
 const output = process.env.UI_SCREENSHOTS;
 const poster = '/img/no-image.svg';

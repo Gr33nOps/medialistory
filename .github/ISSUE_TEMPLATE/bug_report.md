@@ -19,7 +19,7 @@ labels: bug
 
 ## Environment
 
-- [ ] Local (`npm start`)
+- [ ] Local (`npm run dev:worker`)
 - [ ] Live ([medialistory.vercel.app](https://medialistory.vercel.app))
 - Browser:
 - Account type (guest / user / admin):
