@@ -7,7 +7,7 @@
 -- series use `tmdb_series_<id>`. user_game_lists / custom_list_games are unchanged
 -- (they reference games.id and therefore work for every media type as-is).
 --
--- Apply in the Supabase SQL editor (or via apply_migration) once the project is active.
+-- Apply in the Neon SQL editor or with `neon psql`.
 
 ALTER TABLE public.games
   ADD COLUMN IF NOT EXISTS media_type VARCHAR(16) NOT NULL DEFAULT 'game',

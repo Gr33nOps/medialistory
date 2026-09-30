@@ -1,5 +1,5 @@
 /**
- * Ensure a public.users row exists for a Supabase Auth user.
+ * Ensure a public.users row exists for an authenticated identity (Neon Auth).
  * Username uniqueness is enforced by the DB (case-insensitive unique index).
  */
 

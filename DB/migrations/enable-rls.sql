@@ -11,7 +11,7 @@
 -- auth only), so denying anon/authenticated has no effect on the app.
 --
 -- Result: with RLS enabled and no policies, anon/authenticated get deny-all over PostgREST.
--- Apply in the Supabase SQL editor (or via `apply_migration`) once the project is active.
+-- Apply in the SQL editor or with `psql`.
 
 ALTER TABLE public.users              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.games              ENABLE ROW LEVEL SECURITY;

@@ -1,7 +1,7 @@
 {
   "name": "medialistory",
   "version": "1.0.0",
-  "description": "MediaListory - track games, movies, and series in one app. Games from IGDB (Twitch), movies/series from TMDB. Node/Express backend on Neon Postgres + Neon Auth with a static vanilla-JS frontend.",
+  "description": "MediaListory: one library for movies, shows, anime, and games. A vanilla JavaScript frontend on Vercel, an API on Cloudflare Workers, and Neon Postgres.",
   "main": "Backend/server.js",
   "scripts": {
     "start": "node Backend/server.js",
@@ -15,28 +15,32 @@
     "deploy:production": "wrangler deploy --env="
   },
   "keywords": [
-    "games",
+    "media-tracker",
     "movies",
-    "series",
-    "igdb",
+    "tv-shows",
+    "anime",
+    "games",
     "tmdb",
-    "twitch",
+    "kitsu",
+    "igdb",
+    "cloudflare-workers",
     "neon",
-    "express"
+    "postgresql",
+    "vanilla-js"
   ],
   "author": "Gr33nOps",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Gr33nOps/medialistory-code.git"
+    "url": "https://github.com/Gr33nOps/medialistory.git"
   },
   "bugs": {
-    "url": "https://github.com/Gr33nOps/medialistory-code/issues"
+    "url": "https://github.com/Gr33nOps/medialistory/issues"
   },
   "homepage": "https://medialistory.vercel.app",
   "type": "commonjs",
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "dependencies": {
     "@sentry/cloudflare": "^11.1.0",
