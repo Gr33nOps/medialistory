@@ -35,7 +35,7 @@ jobs:
         if: env.HAS_CF_TOKEN != 'true'
         run: echo "::warning::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set; the Worker was not deployed."
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: env.HAS_CF_TOKEN == 'true'
 
       - uses: actions/setup-node@v4
