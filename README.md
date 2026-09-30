@@ -5,174 +5,144 @@
 <h1 align="center">MediaListory</h1>
 
 <p align="center">
-  One library for the movies, shows, anime, and games you go through.<br>
+  One library for the movies, shows, anime, and games you keep track of.<br>
   <a href="https://medialistory.vercel.app"><b>medialistory.vercel.app</b></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Gr33nOps/medialistory-code/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Gr33nOps/medialistory-code/ci.yml?branch=main&style=flat-square&label=CI" alt="CI status"></a>
+  <a href="https://github.com/Gr33nOps/medialistory/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Gr33nOps/medialistory/ci.yml?branch=main&style=flat-square&label=CI" alt="CI status"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT license"></a>
-  <a href="package.json"><img src="https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node 18 or newer"></a>
-  <a href="package.json"><img src="https://img.shields.io/badge/build-none-informational?style=flat-square" alt="No build step"></a>
-  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square" alt="PRs welcome"></a>
-  <a href="CODE_OF_CONDUCT.md"><img src="https://img.shields.io/badge/code%20of%20conduct-read-6b4fbb?style=flat-square" alt="Code of Conduct"></a>
+  <img src="https://img.shields.io/badge/API-Cloudflare%20Workers-F38020?style=flat-square&logo=cloudflare&logoColor=white" alt="API on Cloudflare Workers">
+  <img src="https://img.shields.io/badge/database-Neon%20Postgres-00E599?style=flat-square" alt="Neon Postgres">
+  <img src="https://img.shields.io/badge/frontend-no%20build%20step-informational?style=flat-square" alt="Frontend has no build step">
 </p>
 
-MediaListory started as a game tracker and grew into one place for everything I watch and play. Movies and shows, anime, and games all share the same library, ratings, reviews, lists, and profile, so there is no juggling four apps to remember what you finished.
+![MediaListory: movies, shows, anime, and games in one library](docs/assets/social-preview.png)
 
-You can browse the whole thing without an account. Sign in when you want to start saving.
+MediaListory started as a game tracker and grew into one place for everything I watch and play. Movies, shows, anime, and games share a library, a rating scale, lists, and a profile, while each category keeps the browse filters and detail pages its data source supports.
 
-This repository is the app itself, MIT licensed. The tour below is the short version; [Running it yourself](#running-it-yourself) is the long one.
+You can browse without an account. Sign in when you want to save something.
 
-## A look around
+## The four categories
 
-Everything here works signed out. Browsing, searching, filtering, and opening any title all work without an account; signing in is only for saving to your library, rating, and following people. Every category opens on popular titles rather than an empty box.
-
-Each browses on its own terms, because every provider does. Movies and shows come from TMDB, anime from Kitsu, games from IGDB, and each page offers only the filters its provider genuinely supports. Nothing is filtered client side after the fact, so an exact title match comes back first instead of whatever was already on the page.
-
-The four categories are not skins over one page. They share one layout, library, and rating system, but each carries its own accent color throughout, so you always know where you are.
-
-| ![The Movies page — a grid of film posters carrying a blue accent](docs/screenshots/browse.png) | ![The Shows page — the same grid carrying a green accent](docs/screenshots/shows.png) |
+| ![The Movies page: a grid of film posters with a blue accent](docs/screenshots/browse.png) | ![The Shows page: the same layout with a green accent](docs/screenshots/shows.png) |
 |:--:|:--:|
-| **Movies** — TMDB · blue | **Shows** — TMDB · green |
-| ![The Anime page — the same grid carrying a pink accent](docs/screenshots/anime.png) | ![The Games page — the same grid carrying an amber accent](docs/screenshots/games.png) |
-| **Anime** — Kitsu · pink | **Games** — IGDB · amber |
+| **Movies** (TMDB) | **Shows** (TMDB) |
+| ![The Anime page: the same layout with a pink accent](docs/screenshots/anime.png) | ![The Games page: the same layout with an amber accent](docs/screenshots/games.png) |
+| **Anime** (Kitsu) | **Games** (IGDB) |
 
-Open a title and the poster anchors the page. Beside it sit the genres, credits, runtime, and synopsis; below it the trailer, where to watch, and a few things to go to next. Depending on what it is, a title also picks up the best price today, its opening and ending themes, or the run it belongs to. Saving takes a status, a score out of ten, and a review if you feel like writing one.
+Every category shares one layout and one library. Each has its own accent color and only offers the filters its provider supports: genre, year, rating, and language for movies and shows; season, format, and age rating for anime; platform and game mode for games. Search and filters run against the provider, not against whatever page happens to be loaded, so an exact title match comes back first.
 
-![The Red Dead Redemption 2 page: a large cover on the left, with genres, developer, publisher, platforms and synopsis beside it, the add-to-library panel, and the current best price below](docs/screenshots/detail.png)
+A title page puts the poster beside the genres, credits, and synopsis, with the trailer, where to watch, and related titles below.
 
-## What you can do
+![A title page for Red Dead Redemption 2: cover, genres, developer, platforms, synopsis, the add-to-library panel, and the current best price](docs/screenshots/detail.png)
 
-Track movies, shows, anime, and games in one library, with a status, a score out of ten, and an optional review on anything. Shows and anime keep episode progress, with a one tap "+1" on whatever you are partway through. Custom lists can mix all four.
+## What it does
 
-Beyond that:
+- **Track anything.** Mark a title planned, in progress, completed, on hold, or dropped. Add a score out of ten and an optional review.
+- **Follow progress.** Shows and anime keep episode counts with a one-tap +1. Seasons can be rated separately and roll up into the overall score, and an anime franchise appears as one entry.
+- **Lists.** Custom lists can mix all four categories.
+- **Find things.** Search every category from the nav, with `/` or `Ctrl+K` to jump in.
+- **Bring your history.** Import a Letterboxd, MyAnimeList, or Trakt CSV, or a MediaListory JSON export. Every row shows its match before anything is saved. Export one category or the whole library.
+- **Profiles.** Rank a Top 10 in each category, pin what you are in the middle of, and keep the profile public or private with follow requests.
+- **People.** Follow others, read a feed of what they finished or rated, see a Similar Taste percentage worked out from shared titles, scores, Top 10s, and genres, and compare two libraries side by side.
+- **Extra detail.** Depending on the title: best current game price (CheapShark), MyAnimeList score and opening and ending themes (Jikan, AnimeThemes), and upcoming episode dates (TVmaze).
+- **Sign-in.** Email and password, Google, or GitHub. Light and dark themes, on desktop and phone.
 
-- Search every category at once from the nav, with `/` or `Ctrl-K` to jump into it
-- Filter and sort on what each provider actually exposes: genre, year, rating, language, and runtime for movies and shows; season, format, and age rating for anime; platform and game mode for games
-- See a release calendar of what is coming next, merged across categories and grouped by month
-- Look back on a year: hours, top genres, score distribution, and where the time went by category
-- Import from a Letterboxd, MAL, or Trakt CSV, or a MediaListory JSON export, with a per row match preview before anything is written
-- Rank a Top 10 of all time in each category, and show what you are part way through on your profile
-- See how close someone else's taste is to yours as a percentage, worked out from shared titles, how you both scored them, your Top 10s, and the genres you gravitate to, and find people that way
-- Follow people and get a feed of what they finished, started, or rated
-- Compare libraries with someone side by side: what you both rank, what you both rate highly, what you disagree most about, and the same score broken down per category
-- Keep your profile public or private
-- Sign in with email and password, or with Google or GitHub
-- Switch between light and dark, on desktop or phone
+## How it is built
 
-Admin and moderator dashboards ship with it for handling reports and bans.
-
-## Open source
-
-MediaListory is MIT licensed, has no build step, and needs no paid services beyond the data providers, so you can clone it and run your own copy. [Running it yourself](#running-it-yourself) is the full guide.
-
-- **[MIT License](LICENSE)** — use it, fork it, ship it.
-- **[Contributing guide](CONTRIBUTING.md)** — setup, what CI checks, and how the code is laid out. Issues and pull requests are welcome.
-- **[Code of Conduct](CODE_OF_CONDUCT.md)** — short, and it comes down to criticise the work, not the person.
-- **[Security policy](SECURITY.md)** — report a vulnerability privately instead of in the public tracker.
-- **Issue templates** for [bug reports](.github/ISSUE_TEMPLATE/bug_report.md) and [feature requests](.github/ISSUE_TEMPLATE/feature_request.md), so a report carries what's needed to act on it.
-- **Kept honest in CI** — every push runs the unit, smoke, and Playwright suites plus a Semgrep security scan that fails on any finding, and Dependabot watches dependencies.
-
-The app is free and stays that way. If it's useful to you and you feel like it, there's a [Ko-fi](https://ko-fi.com/zain021xd) and [GitHub Sponsors](https://github.com/sponsors/Gr33nOps) — entirely optional.
-
-## Credits
-
-Movie and TV data from [TMDB](https://www.themoviedb.org/), anime from [Kitsu](https://kitsu.io/), and games from [IGDB](https://www.igdb.com/), a Twitch service.
-
-Detail pages add a little on top of that catalogue, from sources that need no key: game prices from [CheapShark](https://www.cheapshark.com/), anime scores and studios from [MyAnimeList](https://myanimelist.net/) via [Jikan](https://jikan.moe/), opening and ending themes from [AnimeThemes](https://animethemes.moe/), and episode dates from [TVmaze](https://www.tvmaze.com/), whose data is used under [CC BY-SA](https://creativecommons.org/licenses/by-sa/4.0/).
-
-MediaListory uses these APIs but is not endorsed or certified by any of them. Every poster, title, and detail belongs to its owner.
-
----
-
-# Running it yourself
-
-## Stack
-
-A plain HTML, CSS, and JavaScript frontend on an API that runs on **Cloudflare Workers**, with **Neon Postgres** behind it through Hyperdrive. No build step and no frontend framework. Email and password identity comes from Neon Auth; Google and GitHub sign-in runs as a direct OAuth2 code exchange on the API.
-
-The deploy is split. The static frontend runs on **Vercel** and calls the API Worker cross origin. The app mints its own session JWT, stored by the frontend and sent as a Bearer token, and because the API performs the OAuth2 exchange itself, sessions survive that split. The route handlers in `Backend/` are plain modules shared by the Worker (`worker/`) and a legacy Node server (`npm start`).
-
-### Media model
-
-All media lives in one `games` catalog table, discriminated by `media_type` (`movie` | `series` | `anime` | `game`). Every row records its `provider` (`tmdb` | `kitsu` | `igdb`) and `provider_id`, and `game_id` is the universal external ref (`tmdb_movie_<id>`, `tmdb_series_<id>`, `kitsu_<id>`, `igdb_<id>`). A unique index on `(provider, media_type, provider_id)` guarantees IDs from different providers can never collide.
-
-Tracking (`user_game_lists`, including `progress` for episodes watched) and custom lists (`custom_list_games`) reference that catalog, so they work for every media type unchanged. A new category such as books or music slots in as another `media_type` without schema churn.
-
-## Quick start
-
-Node.js 18 or newer, 20 LTS recommended.
-
-```bash
-git clone https://github.com/Gr33nOps/medialistory-code.git
-cd medialistory
-cp .dev.vars.example .dev.vars
-npm install
+```mermaid
+flowchart LR
+  B[Browser]
+  B -- static pages --> V[Vercel]
+  B -- JSON API --> W[Cloudflare Worker]
+  W --> H[Hyperdrive] --> N[(Neon Postgres)]
+  W --> A[Neon Auth]
+  W --> P[TMDB, Kitsu, IGDB<br>and the secondary sources]
+  W --> D[Durable Object<br>rate limits and OAuth codes]
 ```
 
-1. Fill `.dev.vars` from [`.dev.vars.example`](.dev.vars.example): Neon Auth, JWT, Twitch/IGDB, and TMDB, and point `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` at a Neon **branch** (see [`docs/cloudflare-workers.md`](docs/cloudflare-workers.md)). Kitsu needs no key, and Google/GitHub OAuth is optional. The database string comes from the Neon Console under Connect, and the auth values from `neon neon-auth status --project-id <id> --branch production`.
-2. Apply the schema to Neon: [`DB/schema.postgres.sql`](DB/schema.postgres.sql), then the migrations in [`DB/migrations/`](DB/migrations/) in order, through `neon psql` or the Neon SQL editor. See [`DB/README.md`](DB/README.md). `add-external-id-map.sql` is worth applying even though nothing breaks without it: the detail-page extras fall back to resolving their ids live on every view, which is slower and spends more of the upstream budget.
-3. Start it:
+| Layer | Choice |
+|---|---|
+| Frontend | Plain HTML, CSS, and JavaScript served as static files by Vercel. No framework, no bundler. |
+| API | Cloudflare Workers. Route modules live in `Backend/`, the Worker entry is `worker/index.js`. |
+| Database | Neon Postgres through Hyperdrive, queried with Knex. |
+| Identity | Neon Auth for email and password. Google and GitHub sign-in is a direct OAuth2 code exchange on the API. |
+| Catalogs | TMDB (movies, shows), Kitsu (anime), IGDB (games). |
+| Checks | `node:test`, the Worker running on local workerd, Playwright, and a Semgrep scan in CI. |
+
+A few decisions worth knowing about:
+
+- **Catalog on demand, with a fallback.** The API queries the providers per request and writes what it sees to a `games` table (despite the name, it holds every media type). If a provider is down, browse serves the stored rows and says so in an `X-Cache: DEGRADED` header.
+- **One set of handlers, two runtimes.** The route modules run on Workers and on a legacy Express server through a small Express-compatible router (`Backend/http/router.js`). The Worker adds what Express middleware used to do: CORS, security headers, rate limits, body parsing.
+- **Fresh reads after writes.** Hyperdrive query caching is off, because the app lists your library right after you add to it. Each request gets its own Knex connection.
+- **Limits that hold across instances.** The auth limit (40 requests per 15 minutes per IP) lives in a Durable Object so it is exact. The catalog limit (60 per minute) uses the Workers Rate Limiting binding.
+- **Sessions.** HS256 JWTs verified with `jose`, sent as a Bearer token because the API is on a different site from the frontend. OAuth returns to the frontend with a one-time code held in a Durable Object.
+
+The migration from a Node server to Workers, including the full route inventory, is written up in [docs/cloudflare-migration.md](docs/cloudflare-migration.md).
+
+## Run it yourself
+
+You need Node.js 22 or newer, a Neon database (a branch is best for local work), and API keys for the providers you use: TMDB, and a Twitch client ID and secret for IGDB. Kitsu needs no key.
 
 ```bash
+git clone https://github.com/Gr33nOps/medialistory.git
+cd medialistory
+npm install
+cp .dev.vars.example .dev.vars
+```
+
+1. Fill in `.dev.vars`. Every variable is explained in [docs/cloudflare-workers.md](docs/cloudflare-workers.md).
+2. Apply [`DB/schema.postgres.sql`](DB/schema.postgres.sql) to your Neon branch, then the files in [`DB/migrations/`](DB/migrations/) in order. [`DB/README.md`](DB/README.md) has the details.
+3. Point local Hyperdrive at that branch and start the Worker:
+
+```bash
+export CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE="postgres://..."
 npm run dev:worker
 ```
 
-Then open [localhost:8787](http://localhost:8787). The Worker serves the API and, in local development only, the `Frontend/` folder.
+Open [localhost:8787](http://localhost:8787). In local development the Worker serves the API and the `Frontend/` folder together.
 
 | Command | What it does |
-|---------|--------------|
-| `npm run dev:worker` | Run the API Worker locally, serving `Frontend/` too |
+|---|---|
+| `npm run dev:worker` | Run the API and the frontend locally |
 | `npm test` | Unit and smoke tests |
-| `npm run test:worker` | The Worker on local workerd: probes, CORS, headers, limits |
-| `npm run deploy:staging` / `deploy:production` | Deploy the Worker |
-| `npm start` | Legacy Node/Express server (same handlers), kept for rollback |
-| `npm run test:e2e` | Playwright end to end suite |
+| `npm run test:worker` | Run the Worker on local workerd: health probes, CORS, headers, rate limits |
+| `npm run test:e2e` | Playwright end-to-end suite |
+| `npm run deploy:staging`, `npm run deploy:production` | Deploy the Worker |
+| `npm start` | The legacy Express server, same handlers |
 
-Do not set `ALLOW_DEGRADED=1` in production. It lets the server boot with a broken dependency.
+Deploying, secrets, and the environment-variable reference are in [docs/cloudflare-workers.md](docs/cloudflare-workers.md).
 
-## Deploy
+## Testing and CI
 
-**Cloudflare Workers (API).** `medialistory-api` at `https://medialistory-api.gr33nops.workers.dev`, configured in [`wrangler.jsonc`](wrangler.jsonc): Hyperdrive to Neon (query caching off), a Durable Object for auth rate limits and OAuth hand-off codes, and a Rate Limiting binding for catalog calls. Secrets are set with `wrangler secret`. Setup, the environment-variable mapping and deploy steps are in [`docs/cloudflare-workers.md`](docs/cloudflare-workers.md).
+Every push and pull request runs the unit and smoke tests, bundles the Worker, runs the Worker tests on workerd, and runs Semgrep with `--error` on any warning or error. Verified false positives carry an inline `nosemgrep` comment that says why. The Playwright suite runs daily against the live site. Merges to `main` that touch backend code deploy the Worker after the tests pass. Dependabot keeps dependencies and GitHub Actions current.
 
-**Vercel (frontend).** A static deploy of `Frontend/` per [`vercel.json`](vercel.json), no build step. The API origin is set in [`Frontend/common.js`](Frontend/common.js) and allowed in the Vercel CSP `connect-src`.
-
-**OAuth apps.** Register the redirect URIs against the **API origin**, not the frontend: `https://medialistory-api.gr33nops.workers.dev/api/auth/oauth/google/callback` and the matching `/github/callback`. The API runs the exchange and redirects back to `FRONTEND_URL`.
-
-Health probes are `/health` for liveness and `/ready` for database and IGDB reachability. Full procedures live in [`docs/runbook.md`](docs/runbook.md).
-
-## Maintenance
-
-**Keep-alive.** Neon auto suspends an idle project and auto resumes on the next connection, so nothing needs unpausing by hand. [`.github/workflows/keepalive.yml`](.github/workflows/keepalive.yml) runs Monday, Wednesday, and Friday at 12:00 UTC, plus on demand, and pings `/ready` to keep the deployed service warm and surface outages early. Point it elsewhere with a `READY_URL` repo variable.
-
-**Security scanning.** CI runs a Semgrep SAST job over `Backend/` and `Frontend/` that fails the build on any `WARNING` or `ERROR` finding. Verified false positives are suppressed inline with justified `nosemgrep` comments. Locally:
-
-```bash
-semgrep scan --config p/security-audit --config p/secrets --config p/javascript --config p/nodejs --config p/expressjs --config p/owasp-top-ten --severity WARNING --severity ERROR --error Backend Frontend
-```
-
-## Layout
+## Project layout
 
 ```text
-MediaListory/
-├── Backend/          Express API, plus the TMDB, Kitsu, and IGDB proxies
-│                     and enrich.js for the keyless secondary sources
-├── Frontend/         Static pages, CSS, JS
-├── DB/
-│   ├── schema.postgres.sql
-│   ├── migrations/   Incremental SQL
-│   └── legacy/       Archive and a one-time migrator
-├── docs/             API notes, OpenAPI, runbook
-├── test/             unit, smoke, e2e
-└── .github/          CI and issue templates
+Backend/    Route modules, provider proxies, auth, shared middleware
+worker/     Cloudflare Worker entry, request adapter, database and Durable Object glue
+Frontend/   Static pages, CSS, and JavaScript
+DB/         Schema, migrations, and the archived MySQL dump
+docs/       API contracts, OpenAPI spec, runbook, Workers guide, migration notes
+test/       unit, smoke, worker (workerd), deployed (smoke test for a live API), e2e
+.github/    CI, deploy workflow, issue and pull request templates
 ```
 
-Reference: [API contracts](docs/API.md) · [OpenAPI spec](docs/openapi.yaml) · [Runbook](docs/runbook.md)
+Reference: [API contracts](docs/API.md), [OpenAPI spec](docs/openapi.yaml), [runbook](docs/runbook.md).
 
 ## Contributing
 
-Issues and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers the setup, what CI will check, and how the code is laid out. Security issues go through [SECURITY.md](SECURITY.md) rather than the public tracker.
+Issues and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers setup and what CI checks. Report security problems privately, as described in [SECURITY.md](SECURITY.md). The [Code of Conduct](CODE_OF_CONDUCT.md) applies to everyone.
+
+MediaListory is free and has no ads. If you find it useful, there is an optional [Ko-fi](https://ko-fi.com/zain021xd) and [GitHub Sponsors](https://github.com/sponsors/Gr33nOps).
+
+## Credits and data
+
+Movie and show data comes from [TMDB](https://www.themoviedb.org/), anime from [Kitsu](https://kitsu.io/), and games from [IGDB](https://www.igdb.com/), a Twitch service. Detail pages also use [CheapShark](https://www.cheapshark.com/), [Jikan](https://jikan.moe/) (MyAnimeList data), [AnimeThemes](https://animethemes.moe/), and [TVmaze](https://www.tvmaze.com/), whose data is used under [CC BY-SA](https://creativecommons.org/licenses/by-sa/4.0/).
+
+MediaListory is not endorsed or certified by any of these services. Posters, titles, and descriptions belong to their owners.
 
 ## License
 
