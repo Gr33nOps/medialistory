@@ -19,7 +19,7 @@ npm run test:e2e                          # against production
 Target a different environment with `BASE_URL`:
 
 ```bash
-BASE_URL=http://localhost:3000 npm run test:e2e
+BASE_URL=http://localhost:8787 npm run test:e2e
 ```
 
 ## What's covered

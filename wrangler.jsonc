@@ -22,6 +22,8 @@
   // drivers lazily. Only Postgres is used; the rest resolve to an empty module.
   "alias": {
     "better-sqlite3": "./worker/empty-module.js",
+    "mariadb": "./worker/empty-module.js",
+    "mariadb/callback": "./worker/empty-module.js",
     "mysql": "./worker/empty-module.js",
     "mysql2": "./worker/empty-module.js",
     "oracledb": "./worker/empty-module.js",
