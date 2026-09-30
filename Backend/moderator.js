@@ -5,7 +5,6 @@ const { clientError } = require('./errors');
 
 module.exports = (db, verifyToken, verifyModerator, logModeratorActivity) => {
   const router = Router();
-  const supabase = null; // Identity is Neon Auth; roles/bans live in public.users.
 
   router.get('/stats', verifyToken, verifyModerator, async (req, res) => {
     try {
@@ -74,7 +73,7 @@ module.exports = (db, verifyToken, verifyModerator, logModeratorActivity) => {
         return res.status(403).json({ error: 'Cannot ban moderators or admins' });
       }
 
-      await syncUserFlags(db, supabase, userId, {
+      await syncUserFlags(db, userId, {
         is_banned:  true,
         banned_at:  new Date().toISOString(),
         banned_by:  req.userId,
@@ -106,7 +105,7 @@ module.exports = (db, verifyToken, verifyModerator, logModeratorActivity) => {
       if (!user)           return res.status(404).json({ error: 'User not found' });
       if (!user.is_banned) return res.status(400).json({ error: 'User is not banned' });
 
-      await syncUserFlags(db, supabase, userId, {
+      await syncUserFlags(db, userId, {
         is_banned:  false,
         banned_at:  null,
         banned_by:  null,

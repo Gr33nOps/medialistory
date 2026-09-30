@@ -2,12 +2,9 @@
  * Keep public.users role/ban flags updated. public.users is the source of truth
  * that middleware (checkBanned / verifyAdmin / verifyModerator) trusts. The identity
  * provider (Neon Auth) is not consulted here.
- *
- * Signature keeps a placeholder second arg for backward compatibility with existing
- * call sites; it is ignored.
  */
 
-async function syncUserFlags(db, _unused, userId, flags) {
+async function syncUserFlags(db, userId, flags) {
   const keys = [
     'is_banned',
     'banned_at',

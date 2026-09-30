@@ -6,8 +6,6 @@ const { clientError } = require('./errors');
 module.exports = (db, verifyToken, verifyModerator, verifyAdmin, logModeratorActivity) => {
   const router = Router();
 
-  // Identity is Neon Auth; role/ban state lives in public.users (source of truth).
-  const supabase = null;
 
   router.get('/users', verifyToken, verifyAdmin, async (req, res) => {
     try {
@@ -72,7 +70,7 @@ module.exports = (db, verifyToken, verifyModerator, verifyAdmin, logModeratorAct
       if (isAdmin)  return res.status(403).json({ error: 'Cannot ban an admin' });
 
       const bannedAt = new Date().toISOString();
-      await syncUserFlags(db, supabase, userId, {
+      await syncUserFlags(db, userId, {
         is_banned:  true,
         banned_at:  bannedAt,
         banned_by:  req.userId,
@@ -106,7 +104,7 @@ module.exports = (db, verifyToken, verifyModerator, verifyAdmin, logModeratorAct
       const isBanned = dbUser.is_banned || false;
       if (!isBanned) return res.status(400).json({ error: 'User is not banned' });
 
-      await syncUserFlags(db, supabase, userId, {
+      await syncUserFlags(db, userId, {
         is_banned:  false,
         banned_at:  null,
         banned_by:  null,
@@ -142,7 +140,7 @@ module.exports = (db, verifyToken, verifyModerator, verifyAdmin, logModeratorAct
       const isModerator = dbUser.is_moderator || false;
       if (isModerator) return res.status(400).json({ error: 'User is already a moderator' });
 
-      await syncUserFlags(db, supabase, userId, { is_moderator: true });
+      await syncUserFlags(db, userId, { is_moderator: true });
 
       await logModeratorActivity(
         req.userId, 'promote_moderator', 'user', userId,
@@ -172,7 +170,7 @@ module.exports = (db, verifyToken, verifyModerator, verifyAdmin, logModeratorAct
       if (isAdmin)      return res.status(403).json({ error: 'Cannot demote an admin' });
       if (!isModerator) return res.status(400).json({ error: 'User is not a moderator' });
 
-      await syncUserFlags(db, supabase, userId, { is_moderator: false });
+      await syncUserFlags(db, userId, { is_moderator: false });
 
       await logModeratorActivity(
         req.userId, 'demote_moderator', 'user', userId,
